@@ -1,17 +1,18 @@
 """
 主程序 - 电商 AI 生图流水线
-完整流程: 加载数据 → 构建向量库 → 检索爆款 → 分析风格 → 生成宣传图
+完整流程: 初始化数据库 → 检索爆款 → 分析风格 → 生成宣传图
 """
-import os
+import csv
+import time
 from pathlib import Path
+from typing import List, Dict
 from PIL import Image
 
-from config import OUTPUT_DIR, TOP_K_RETRIEVAL
-from milvus_db import FashionMilvusDB
+from config import OUTPUT_DIR, TOP_K_RETRIEVAL, COLLECTION_NAME
 from embedding import EmbeddingGenerator
 from retrieval import BestsellerRetriever
 from image_gen import ImageGenerator
-from utils import save_image, display_comparison
+from utils import save_image
 
 
 class FashionImagePipeline:
@@ -23,50 +24,80 @@ class FashionImagePipeline:
         print("Nano Banana + Milvus 电商生图流水线")
         print("=" * 60)
 
-        self.milvus_db = FashionMilvusDB()
+        self.retriever = BestsellerRetriever()
         self.embed_gen = EmbeddingGenerator()
-        self.retriever = BestsellerRetriever(self.milvus_db)
         self.image_gen = ImageGenerator()
+        self.tfidf = None
 
-    def build_vector_database(self, overwrite: bool = False):
-        """
-        构建向量数据库
+    def _check_database_ready(self) -> bool:
+        """检查数据库是否已初始化"""
+        try:
+            if not self.retriever.has_collection():
+                return False
+            stats = self.retriever.get_collection_stats()
+            return stats.get('row_count', 0) > 0
+        except Exception:
+            return False
 
-        Args:
-            overwrite: 是否覆盖已存在的数据库
-        """
+    def _ensure_database_ready(self):
+        """确保数据库已初始化（只初始化一次）"""
+        if self._check_database_ready():
+            stats = self.retriever.get_collection_stats()
+            print(f"\n✓ 数据库已就绪，包含 {stats['row_count']} 条记录")
+            # 加载 TF-IDF 向量化器
+            products, _ = self.embed_gen.load_products()
+            self.tfidf = self.embed_gen.build_tfidf_vectorizer(products)
+            return
+
+        print("\n数据库未初始化，开始初始化...")
+        self._init_database()
+
+    def _init_database(self, overwrite: bool = False):
+        """初始化向量数据库"""
         print("\n" + "=" * 60)
-        print("构建向量数据库")
+        print("初始化向量数据库")
         print("=" * 60)
 
-        # 创建 Collection
-        self.milvus_db.create_collection(overwrite=overwrite)
+        # 检查数据文件
+        csv_path = Path("products.csv")
+        image_dir = Path("images")
 
-        # 生成所有嵌入向量
+        if not csv_path.exists():
+            raise FileNotFoundError(f"找不到 {csv_path}")
+        if not image_dir.exists():
+            raise FileNotFoundError(f"找不到 {image_dir} 目录")
+
+        # 统计图片
+        image_files = list(image_dir.glob("*.jpg")) + list(image_dir.glob("*.png"))
+        print(f"找到 {len(image_files)} 张商品图片")
+
+        # 创建 Collection
+        self.retriever.create_collection(overwrite=overwrite)
+
+        # 生成嵌入向量
         products, dense_vectors, sparse_vectors, tfidf = \
             self.embed_gen.process_all_embeddings()
 
         # 插入数据库
-        self.milvus_db.insert_products(products, dense_vectors, sparse_vectors)
+        self.retriever.insert_products(products, dense_vectors, sparse_vectors)
 
-        # 保存 TF-IDF 向量化器供后续使用
+        # 保存 TF-IDF
         self.tfidf = tfidf
 
-        print("\n向量数据库构建完成!")
+        stats = self.retriever.get_collection_stats()
+        print(f"\n✓ 数据库初始化完成! 共 {stats['row_count']} 条记录")
 
     def process_new_product(
         self,
         new_product_id: str,
-        save_output: bool = True,
-        display: bool = True
-    ) -> dict:
+        save_output: bool = True
+    ) -> Dict:
         """
         处理单个新品: 检索 → 分析 → 生成
 
         Args:
             new_product_id: 新品 ID (如 "NEW001")
             save_output: 是否保存输出图片
-            display: 是否显示结果
 
         Returns:
             处理结果字典
@@ -83,130 +114,184 @@ class FashionImagePipeline:
         )
 
         if not new_product:
-            print(f"错误: 找不到新品 {new_product_id}")
-            return None
+            print(f"✗ 找不到新品 {new_product_id}")
+            return {"new_id": new_product_id, "success": False, "error": "未找到"}
 
-        print(f"品类: {new_product['category']}")
-        print(f"风格: {new_product['style']}")
-        print(f"季节: {new_product['season']}")
-        print(f"场景提示: {new_product['prompt_hint']}")
+        print(f"  品类: {new_product['category']}")
+        print(f"  风格: {new_product['style']}")
+        print(f"  场景: {new_product.get('prompt_hint', '')}")
 
-        # 编码新品
-        query_dense, query_sparse, new_img = self.embed_gen.encode_new_product(
-            new_product, self.tfidf
-        )
+        try:
+            # 编码新品
+            query_dense, query_sparse, new_img = self.embed_gen.encode_new_product(
+                new_product, self.tfidf
+            )
 
-        # 检索相似爆款
-        retrieved = self.retriever.retrieve_similar_bestsellers(
-            query_dense=query_dense.tolist(),
-            query_sparse=query_sparse,
-            category=new_product["category"],
-            top_k=TOP_K_RETRIEVAL
-        )
+            # 检索相似爆款
+            retrieved = self.retriever.retrieve_similar_bestsellers(
+                query_dense=query_dense.tolist(),
+                query_sparse=query_sparse,
+                category=new_product["category"],
+                top_k=TOP_K_RETRIEVAL
+            )
 
-        if not retrieved:
-            print("警告: 未找到相似爆款")
-            return None
+            if not retrieved:
+                print("  ✗ 未找到相似爆款")
+                return {
+                    "new_id": new_product_id,
+                    "success": False,
+                    "error": "未找到相似爆款"
+                }
 
-        # 提取参考图片
-        ref_images = [r["image"] for r in retrieved if r["image"]]
+            # 提取参考图片
+            ref_images = [r["image"] for r in retrieved if r["image"]]
 
-        # 分析风格并生成图片
-        style_prompt, generated = self.image_gen.process_single_product(
-            new_product_image=new_img,
-            reference_images=ref_images,
-            scene_hint=new_product.get("prompt_hint", "")
-        )
+            # 分析风格并生成图片
+            style_prompt, generated = self.image_gen.process_single_product(
+                new_product_image=new_img,
+                reference_images=ref_images,
+                scene_hint=new_product.get("prompt_hint", "")
+            )
 
-        if not generated:
-            print("警告: 图片生成失败")
-            return {
-                "new_product": new_product,
-                "new_image": new_img,
-                "retrieved": retrieved,
-                "style_prompt": style_prompt,
-                "generated_images": []
-            }
+            if not generated:
+                print("  ✗ 图片生成失败")
+                return {
+                    "new_id": new_product_id,
+                    "success": False,
+                    "error": "图片生成失败"
+                }
 
-        # 保存结果
-        result = {
-            "new_product": new_product,
-            "new_image": new_img,
-            "retrieved": retrieved,
-            "style_prompt": style_prompt,
-            "generated_images": generated
-        }
-
-        if save_output:
-            output_dir = OUTPUT_DIR / new_product_id
-            output_dir.mkdir(exist_ok=True)
-
-            # 保存新品原图
-            save_image(new_img, str(output_dir / f"{new_product_id}_original.png"))
-
-            # 保存参考图
-            for i, ref in enumerate(retrieved):
-                if ref["image"]:
-                    save_image(
-                        ref["image"],
-                        str(output_dir / f"{new_product_id}_reference_{i+1}.png")
-                    )
-
-            # 保存生成图
-            for i, gen_img in enumerate(generated):
-                save_image(
-                    gen_img,
-                    str(output_dir / f"{new_product_id}_generated_{i+1}.png")
+            # 保存结果
+            if save_output:
+                self._save_output(
+                    new_product_id, new_img, retrieved,
+                    generated, style_prompt
                 )
 
-            # 保存风格描述
-            with open(output_dir / f"{new_product_id}_style_prompt.txt", "w", encoding="utf-8") as f:
-                f.write(style_prompt)
+            print(f"  ✓ 完成: 生成 {len(generated)} 张图片")
 
-            print(f"\n所有结果已保存到: {output_dir}")
+            return {
+                "new_id": new_product_id,
+                "category": new_product['category'],
+                "style": new_product['style'],
+                "retrieved_count": len(retrieved),
+                "generated_count": len(generated),
+                "style_prompt": style_prompt,
+                "success": True
+            }
 
-        if display:
-            self._display_results(result)
+        except Exception as e:
+            print(f"  ✗ 错误: {e}")
+            return {
+                "new_id": new_product_id,
+                "success": False,
+                "error": str(e)
+            }
 
-        return result
+    def _save_output(
+        self,
+        new_id: str,
+        new_img: Image.Image,
+        retrieved: List[Dict],
+        generated: List[Image.Image],
+        style_prompt: str
+    ):
+        """保存输出文件"""
+        output_dir = OUTPUT_DIR / new_id
+        output_dir.mkdir(exist_ok=True)
 
-    def _display_results(self, result: dict):
-        """显示处理结果"""
-        print("\n" + "=" * 60)
-        print("结果展示")
-        print("=" * 60)
+        # 保存原图
+        save_image(new_img, str(output_dir / f"{new_id}_original.png"))
 
-        print("\n[风格描述]")
-        print(result["style_prompt"])
+        # 保存参考图
+        for i, ref in enumerate(retrieved):
+            if ref.get("image"):
+                save_image(
+                    ref["image"],
+                    str(output_dir / f"{new_id}_reference_{i+1}.png")
+                )
 
-        print(f"\n[生成图片] 共 {len(result['generated_images'])} 张")
+        # 保存生成图
+        for i, gen_img in enumerate(generated):
+            save_image(
+                gen_img,
+                str(output_dir / f"{new_id}_generated_{i+1}.png")
+            )
 
-    def run_full_pipeline(self, new_product_ids: list = None):
+        # 保存 prompt
+        with open(output_dir / f"{new_id}_style_prompt.txt", "w", encoding="utf-8") as f:
+            f.write(style_prompt)
+
+    def _generate_summary(self, results: List[Dict], save: bool = True):
+        """生成汇总报告"""
+        print(f"\n{'='*60}")
+        print("批量处理汇总")
+        print(f"{'='*60}")
+
+        success_count = sum(1 for r in results if r.get("success"))
+        fail_count = len(results) - success_count
+
+        print(f"  总计: {len(results)} 个")
+        print(f"  成功: {success_count} 个")
+        print(f"  失败: {fail_count} 个")
+
+        if save:
+            report_path = OUTPUT_DIR / "batch_report.csv"
+            with open(report_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=[
+                    "new_id", "category", "style", "retrieved_count",
+                    "generated_count", "success", "error", "style_prompt"
+                ], extrasaction='ignore')
+                writer.writeheader()
+                writer.writerows(results)
+            print(f"\n  报告已保存: {report_path}")
+
+    def run(
+        self,
+        new_product_ids: List[str] = None,
+        save_report: bool = True
+    ) -> List[Dict]:
         """
-        运行完整流水线
+        运行流水线
 
         Args:
-            new_product_ids: 要处理的新品 ID 列表，如果为 None 则处理所有
+            new_product_ids: 新品 ID 列表，None 则处理全部
+            save_report: 是否保存汇总报告
+
+        Returns:
+            处理结果列表
         """
-        # 构建向量数据库
-        self.build_vector_database(overwrite=False)
+        # 确保数据库已初始化
+        self._ensure_database_ready()
 
-        # 获取所有新品
-        new_products = self.embed_gen.load_new_products()
-
+        # 获取要处理的新品列表
         if new_product_ids is None:
+            new_products = self.embed_gen.load_new_products()
             new_product_ids = [p["new_id"] for p in new_products]
 
-        # 处理每个新品
+        if not new_product_ids:
+            print("\n没有需要处理的新品")
+            return []
+
+        # 批量处理
         results = []
-        for pid in new_product_ids:
-            result = self.process_new_product(pid)
+        total = len(new_product_ids)
+
+        print(f"\n开始处理 {total} 个新品...")
+
+        for i, pid in enumerate(new_product_ids, 1):
+            print(f"\n[{i}/{total}] {pid}")
+            result = self.process_new_product(pid, save_output=True)
             if result:
                 results.append(result)
 
-        print("\n" + "=" * 60)
-        print(f"流水线完成! 共处理 {len(results)} 个新品")
-        print("=" * 60)
+            # 礼貌延迟
+            if i < total:
+                time.sleep(1)
+
+        # 生成汇总报告
+        if len(results) > 1 and save_report:
+            self._generate_summary(results)
 
         return results
 
@@ -215,42 +300,42 @@ def main():
     """主函数"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="电商 AI 生图流水线")
-    parser.add_argument("--build-db", action="store_true", help="构建向量数据库")
+    parser = argparse.ArgumentParser(
+        description="Nano Banana + Milvus 电商 AI 生图流水线",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  python main.py                    # 处理所有新品
+  python main.py --process NEW001   # 处理单个新品
+  python main.py --ids NEW001 NEW002 # 处理指定新品
+  python main.py --reinit           # 强制重新初始化数据库
+        """
+    )
+
     parser.add_argument("--process", type=str, help="处理指定新品 ID")
-    parser.add_argument("--batch", action="store_true", help="批量处理所有新品")
-    parser.add_argument("--overwrite", action="store_true", help="覆盖已存在的数据库")
+    parser.add_argument("--ids", nargs="+", help="处理指定新品 ID 列表")
+    parser.add_argument("--reinit", action="store_true", help="强制重新初始化数据库")
 
     args = parser.parse_args()
 
     pipeline = FashionImagePipeline()
 
-    if args.build_db or args.batch:
-        # 确保数据库已构建
-        if not Path(pipeline.milvus_db.client._uri).exists() or args.overwrite:
-            pipeline.build_vector_database(overwrite=args.overwrite)
-        else:
-            # 加载现有的 TF-IDF
-            from embedding import EmbeddingGenerator
-            products, _ = pipeline.embed_gen.load_products()
-            pipeline.tfidf = pipeline.embed_gen.build_tfidf_vectorizer(products)
+    # 强制重新初始化
+    if args.reinit:
+        pipeline._init_database(overwrite=True)
 
+    # 处理单个新品
     if args.process:
-        # 处理单个新品
+        pipeline._ensure_database_ready()
         pipeline.process_new_product(args.process)
 
-    elif args.batch:
-        # 批量处理
-        new_products = pipeline.embed_gen.load_new_products()
-        product_ids = [p["new_id"] for p in new_products]
-        pipeline.run_full_pipeline(product_ids)
+    # 处理指定列表
+    elif args.ids:
+        pipeline.run(new_product_ids=args.ids)
 
+    # 处理所有新品（默认）
     else:
-        print("\n使用方法:")
-        print("  python main.py --build-db          # 构建向量数据库")
-        print("  python main.py --process NEW001    # 处理单个新品")
-        print("  python main.py --batch             # 批量处理所有新品")
-        print("  python main.py --build-db --overwrite  # 重建数据库")
+        pipeline.run()
 
 
 if __name__ == "__main__":

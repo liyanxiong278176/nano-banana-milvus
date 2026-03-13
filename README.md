@@ -64,7 +64,7 @@
                                     │
                                     ▼
 ┌───────────────────────────────────────────────────────────────────────┐
-│  模块2：混合检索 (milvus_db.py + retrieval.py)                        │
+│  模块2：混合检索 (retrieval.py)                                       │
 │  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐           │
 │  │  Dense   │   │  Sparse  │   │  Scalar  │   │   RRF    │           │
 │  │  Search  │   │  Search  │   │  Filter  │   │  Ranker   │           │
@@ -141,12 +141,9 @@ nano-banana-milvus/
 ├── config.py              # 配置文件（API Key、模型选择、路径）
 ├── utils.py               # 工具函数（图片处理、API 调用）
 ├── embedding.py           # 向量嵌入生成（Dense + Sparse）
-├── milvus_db.py           # Milvus 数据库操作
-├── retrieval.py           # 爆款检索模块
+├── retrieval.py           # 检索模块（Milvus数据库 + 混合检索）
 ├── image_gen.py           # 图像生成模块（风格分析 + 生图）
-├── main.py                # 主程序入口
-├── batch_process.py       # 批量处理脚本
-├── init_db.py             # 数据库初始化脚本
+├── main.py                # 主程序（完整流水线，自动初始化数据库）
 ├── test_pipeline.py       # 测试脚本
 │
 ├── requirements.txt       # Python 依赖
@@ -166,13 +163,12 @@ nano-banana-milvus/
 
 | 文件 | 作用 | 核心类/函数 |
 |------|------|------------|
-| `config.py` | 集中配置管理 | API Key、模型 ID、路径常量 |
-| `utils.py` | 通用工具函数 | `get_image_embeddings()`, `image_to_uri()` |
+| `main.py` | 完整流水线 | `FashionImagePipeline` 类（自动初始化+生图） |
+| `retrieval.py` | 数据库+检索 | `BestsellerRetriever` 类 |
 | `embedding.py` | 向量生成 | `EmbeddingGenerator` 类 |
-| `milvus_db.py` | 数据库操作 | `FashionMilvusDB` 类，`hybrid_search()` |
-| `retrieval.py` | 检索业务 | `BestsellerRetriever` 类 |
 | `image_gen.py` | 图像生成 | `ImageGenerator` 类 |
-| `main.py` | 流水线编排 | `FashionImagePipeline` 类 |
+| `config.py` | 配置管理 | API Key、模型 ID、路径常量 |
+| `utils.py` | 工具函数 | `get_image_embeddings()`, `image_to_uri()` |
 
 ---
 
@@ -247,21 +243,19 @@ NEW001,NEW001.jpg,midi_dress,knitted,autumn,Blue knitted cardigan over gray skir
 ### 5. 运行项目
 
 ```bash
-# 方式一：使用主程序
+# 处理所有新品（首次运行会自动初始化数据库）
+python main.py
 
-# 1. 构建向量数据库
-python main.py --build-db
-
-# 2. 处理单个新品
+# 处理单个新品
 python main.py --process NEW001
 
-# 3. 批量处理所有新品
-python main.py --batch
+# 处理指定新品
+python main.py --ids NEW001 NEW002 NEW003
 
-# 方式二：使用批量处理脚本
-python batch_process.py --all
+# 强制重新初始化数据库
+python main.py --reinit
 
-# 方式三：测试环境配置
+# 测试环境配置
 python test_pipeline.py --all
 ```
 
@@ -316,7 +310,7 @@ A: 检查 Milvus 是否启动：`docker ps | grep milvus`
 
 A: 检查 API Key 是否正确，访问 https://openrouter.ai/settings/credits 查看余额
 
-**Q: 图片生成质量不好？**
+**Q: 图片生���质量不好？**
 
 A: 尝试调整 `config.py` 中的 `IMAGE_GEN_MODEL` 或优化 prompt_hint
 

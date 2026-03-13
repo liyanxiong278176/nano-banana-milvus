@@ -63,28 +63,28 @@ def test_utils():
 
 
 def test_milvus():
-    """测试 Milvus 模块"""
+    """测试检索模块"""
     print("\n" + "=" * 60)
-    print("测试: Milvus 模块")
+    print("测试: 检索模块")
     print("=" * 60)
 
     try:
-        from milvus_db import FashionMilvusDB
+        from retrieval import BestsellerRetriever
 
-        db = FashionMilvusDB()
-        print(f"✓ Milvus 客户端创建成功")
+        retriever = BestsellerRetriever()
+        print(f"✓ 检索器创建成功")
 
         # 检查 Collection
-        has_collection = db.client.has_collection(COLLECTION_NAME)
+        has_collection = retriever.has_collection()
         print(f"  Collection 存在: {has_collection}")
 
         if has_collection:
-            stats = db.get_collection_stats()
+            stats = retriever.get_collection_stats()
             print(f"  记录数: {stats['row_count']}")
 
         return True
     except Exception as e:
-        print(f"✗ Milvus 模块测试失败: {e}")
+        print(f"✗ 检索模块测试失败: {e}")
         import traceback
         traceback.print_exc()
         return False
