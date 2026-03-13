@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(pip install:*)",
+      "Bash(docker:*)",
+      "Bash(dir D:\\\\agent_learning\\\\nano-banana-milvus\\\\images:*)",
+      "Bash(python:*)",
+      "WebSearch"
+    ]
+  }
+}
