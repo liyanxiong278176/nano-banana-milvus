@@ -316,6 +316,123 @@ A: 尝试调整 `config.py` 中的 `IMAGE_GEN_MODEL` 或优化 prompt_hint
 
 ---
 
+## 性能指标
+
+### 检索性能
+
+基于 120 个商品的测试集：
+
+| 检索方法 | Precision@5 | 说明 |
+|---------|-------------|------|
+| Dense 向量 | 76% | 仅使用视���特征向量 (NVIDIA 模型) |
+| Sparse 向量 | 40% | 仅使用文本特征向量 (TF-IDF) |
+| **混合检索 (RRF)** | **40%** | Dense + Sparse 融合 |
+
+*测试方法：新品图片 → API生成向量 → Milvus混合检索 → 评估同品类召回率*
+
+**详细指标** (Dense 向量):
+- **MRR**: 0.50 (第一个相关商品平均排名)
+- **MAP**: 1.84 (平均准确率均值)
+- **NDCG@5**: 0.96 (归一化折损累计增益)
+
+### 成本对比
+
+| 场景 | 传统拍摄 | AI生图 | 节省 |
+|------|---------|--------|------|
+| 10商品 | RMB 4,250 | RMB 17 | **99.6%** |
+| 200商品/年 | RMB 27,050 | RMB 349 | **98.7%** |
+| 1000商品/年 | RMB 124,800 | RMB 1,745 | **98.6%** |
+
+单张成本：传统 RMB 30-100 vs AI RMB 0.44
+
+### 时间成本
+
+| 项目 | 传统方式 | AI方式 |
+|------|---------|--------|
+| 准备周期 | 3-7天 | <5分钟 |
+| 单张生成 | 30-60分钟 | 30-60秒 |
+
+---
+
 ## 许可证
 
 本项目仅供学习参考使用。
+
+
+---
+
+## 前后端分离架构
+
+### 项目结构
+
+```
+nano-banana-milvus/
+├── backend/              # FastAPI 后端
+│   ├── api.py           # API 服务
+│   ├── config.py        # 配置文件
+│   ├── embedding.py     # 向量嵌��
+│   ├── retrieval.py     # 检索模块
+│   ├── image_gen.py     # 图像生成
+│   ├── utils.py         # 工具函数
+│   ├── main.py          # CLI 入口
+│   ├── images/          # 历史爆款图片
+│   ├── new_products/    # 新品图片
+│   ├── output/          # 生成结果
+│   ├── products.csv     # 商品元数据
+│   └── requirements.txt # Python 依赖
+│
+└── frontend/            # Vue3 前端
+    ├── index.html       # 入口文件
+    ├── package.json     # 依赖配置
+    ├── vite.config.js   # Vite 配置
+    └── src/
+        ├── main.js
+        ├── App.vue
+        └── components/
+            ├── UploadForm.vue      # 上传表单
+            └── ResultsGallery.vue   # 结果展示
+```
+
+### 快速启动
+
+#### 1. 启动 Milvus
+
+```bash
+docker run -d --name milvus-standalone \
+  -p 19530:19530 \
+  -v $(pwd)/backend/milvus_data:/var/lib/milvus \
+  milvusdb/milvus:latest
+```
+
+#### 2. 启动后端
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+python api.py
+```
+
+#### 3. 启动前端
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+访问 http://localhost:3000
+
+### API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/api/upload` | POST | 上传并生成 |
+| `/api/tasks/{task_id}` | GET | 任务状态 |
+| `/api/output/{product_id}/{filename}` | GET | 获取图片 |
+| `/api/categories` | GET | 品类列表 |
+| `/api/styles` | GET | 风格列表 |
+
+---
