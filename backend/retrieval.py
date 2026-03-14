@@ -267,15 +267,15 @@ class BestsellerRetriever:
             (图片列表, 文字描述)
         """
         images = []
-        description = "Top-selling fashion products analysis:\n\n"
+        description = "畅销时尚产品分析：\n\n"
 
         for i, item in enumerate(retrieved, 1):
             if item.get("image"):
                 images.append(item["image"])
 
-            description += f"{i}. Product: {item['product_id']}\n"
-            description += f"   Style: {item['style']}, Color: {item['color']}\n"
-            description += f"   Description: {item['description']}\n\n"
+            description += f"{i}. 产品ID: {item['product_id']}\n"
+            description += f"   风格: {item['style']}, 颜色: {item['color']}\n"
+            description += f"   描述: {item['description']}\n\n"
 
         return images, description
 

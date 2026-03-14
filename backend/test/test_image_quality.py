@@ -43,8 +43,8 @@ class ImageQualityComparator:
 
     # 模拟普通电商卖家的���单 prompt（基线方案使用）
     BASELINE_PROMPT = (
-        "Generate a promotional photo of a model wearing this clothing. "
-        "Make it look professional and suitable for e-commerce."
+        "请生成一张模特穿着这件服装的宣传照片。"
+        "要专业、适合电商使用。"
     )
 
     def __init__(self):
@@ -149,15 +149,15 @@ class ImageQualityComparator:
         style_content.append({
             "type": "text",
             "text": (
-                "These are our top-selling fashion product photos.\n\n"
-                "Analyze their common visual style in these dimensions:\n"
-                "1. Scene / background setting\n"
-                "2. Lighting and color tone\n"
-                "3. Model pose and framing\n"
-                "4. Overall mood and aesthetic\n\n"
-                "Then, write ONE concise image generation prompt "
-                "(under 100 words) that captures this style. "
-                "Output ONLY the prompt, nothing else."
+                "这些是我们店铺最畅销的时尚产品宣传照片。\n\n"
+                "请分析它们的共同视觉风格，从以下维度：\n"
+                "1. 场景/背景设置\n"
+                "2. 光线和色调\n"
+                "3. 模特姿势和构图\n"
+                "4. 整体氛围和美学风格\n\n"
+                "基于以上分析，请写一段简洁的图像生成提示词（100字以内），"
+                "描述模特穿着新服装的场景。\n"
+                "只输出提示词，不要输出其他内容。"
             ),
         })
 
@@ -175,18 +175,16 @@ class ImageQualityComparator:
         print("    [本方案] 生成中...")
 
         gen_prompt = (
-            f"I have a new clothing product (Image 1: flat-lay photo) and a reference "
-            f"promotional photo from our bestselling catalog (Image 2).\n\n"
-            f"Generate a professional e-commerce promotional photograph of a female model "
-            f"wearing the clothing from Image 1.\n\n"
-            f"Style guidance: {style_prompt}\n\n"
-            f"Requirements:\n"
-            f"- Full body shot, photorealistic, high quality\n"
-            f"- The clothing should match Image 1 exactly\n"
-            f"- The photo style and mood should match Image 2\n"
-            f"- Natural fit between clothing and model body\n"
-            f"- No visible tags or labels\n"
-            f"- Sharp details, professional lighting"
+            f"图片1是一件新的服装产品（平铺照片），图片2是我们畅销目录中的参考宣传照。\n\n"
+            f"请生成一张专业的电商宣传照片，展示一位女性模特穿着图片1中的服装。\n\n"
+            f"风格指导：{style_prompt}\n\n"
+            f"要求：\n"
+            f"- 全身照，照片级真实感，高质量\n"
+            f"- 服装必须与图片1完全一致\n"
+            f"- 照片风格和氛围应与图片2匹配\n"
+            f"- 服装与模特身体的贴合自然\n"
+            f"- 无可见标签或吊牌\n"
+            f"- 细节清晰，专业布光"
         )
 
         gen_content = [
@@ -232,16 +230,16 @@ class ImageQualityComparator:
         print(f"    [VLM 评分] 评估 {method_name}...")
 
         score_prompt = """
-You are an expert e-commerce photo quality evaluator. Please evaluate the generated promotional photo (Image 2) against the original product flat-lay (Image 1).
+你是一位专业的电商照片质量评估专家。请评估生成的宣传照片（图片2）与原始产品平铺图（图片1）的对比。
 
-Rate the following dimensions on a scale of 1-5:
-1. clothing_accuracy: How accurately does the clothing in Image 2 match the original product in Image 1?
-2. pose_naturalness: How natural is the model's pose and fit?
-3. scene_quality: How professional is the background/scene?
-4. lighting_quality: How good is the lighting?
-5. commercial_value: Overall, how suitable is this for e-commerce use?
+请对以下维度进行评分（1-5分）：
+1. clothing_accuracy：图片2中的服装与图片1中的原始产品匹配度如何？
+2. pose_naturalness：模特的姿势和合身度自然吗？
+3. scene_quality：背景/场景专业吗？
+4. lighting_quality：布光质量如何？
+5. commercial_value：总体来说，这张图片适合电商使用吗？
 
-Output ONLY a JSON like:
+只输出JSON格式，例如：
 {"clothing_accuracy": 4, "pose_naturalness": 3, "scene_quality": 5, "lighting_quality": 4, "commercial_value": 4}
 """
 
