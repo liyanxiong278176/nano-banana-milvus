@@ -45,7 +45,7 @@
           <label class="form-label">商品品类</label>
           <select v-model="form.category" class="form-select" :disabled="loading">
             <option value="">选择品类</option>
-            <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+            <option v-for="cat in categories" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
           </select>
         </div>
 
@@ -53,7 +53,7 @@
           <label class="form-label">商品风格</label>
           <select v-model="form.style" class="form-select" :disabled="loading">
             <option value="">选择风格</option>
-            <option v-for="style in styles" :key="style" :value="style">{{ style }}</option>
+            <option v-for="style in styles" :key="style.value" :value="style.value">{{ style.label }}</option>
           </select>
         </div>
       </div>
@@ -79,6 +79,30 @@
             placeholder="例如：温馨的咖啡厅场景"
             :disabled="loading"
           >
+        </div>
+      </div>
+
+      <!-- 高级选项 -->
+      <div class="advanced-options">
+        <div class="advanced-header" @click="showAdvanced = !showAdvanced">
+          <span>高级选项</span>
+          <svg :class="{ 'rotated': showAdvanced }" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 6L8 10M12 6L8 10M8 10V14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div v-show="showAdvanced" class="advanced-content">
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                v-model="form.enableQualityCheck"
+                :disabled="loading"
+                class="checkbox"
+              >
+              <span>启用 AI 质量评估</span>
+            </label>
+            <p class="option-hint">启用后将生成图片并进行 AI 质量评分</p>
+          </div>
         </div>
       </div>
     </div>
@@ -112,7 +136,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 
 const emit = defineEmits(['generated'])
 
@@ -125,15 +149,32 @@ const progress = ref(0)
 const progressMessage = ref('')
 const error = ref('')
 
-const categories = ref(['midi_dress', 'maxi_dress', 'mini_dress', 'skirt', 'top', 'pants'])
-const styles = ref(['casual', 'formal', 'sporty', 'elegant', 'vintage', 'modern'])
+const categories = ref([
+  { value: 'midi_dress', label: '中长裙' },
+  { value: 'maxi_dress', label: '长裙' },
+  { value: 'mini_dress', label: '短裙' },
+  { value: 'skirt', label: '半身裙' },
+  { value: 'top', label: '上装' },
+  { value: 'pants', label: '裤装' }
+])
+const styles = ref([
+  { value: 'casual', label: '休闲' },
+  { value: 'formal', label: '正式' },
+  { value: 'sporty', label: '运动' },
+  { value: 'elegant', label: '优雅' },
+  { value: 'vintage', label: '复古' },
+  { value: 'modern', label: '现代' }
+])
 
 const form = ref({
   category: '',
   style: '',
   season: 'all_season',
-  sceneHint: ''
+  sceneHint: '',
+  enableQualityCheck: false
 })
+
+const showAdvanced = ref(false)
 
 const canSubmit = computed(() => {
   return selectedFile.value && form.value.category && form.value.style
@@ -191,6 +232,7 @@ const handleSubmit = async () => {
     formData.append('style', form.value.style)
     formData.append('season', form.value.season)
     formData.append('scene_hint', form.value.sceneHint)
+    formData.append('enable_quality_check', form.value.enableQualityCheck ? 'true' : 'false')
 
     const response = await fetch('/api/upload', {
       method: 'POST',
@@ -228,13 +270,22 @@ const pollTaskStatus = async (taskId, productId) => {
       if (data.status === 'pending') {
         progressMessage.value = '等待处理...'
       } else if (data.status === 'processing') {
-        const messages = [
-          '分析图片中...',
-          '检索相似爆款...',
-          '分析风格特征...',
-          '生成宣传图...'
-        ]
-        progressMessage.value = messages[Math.min(Math.floor(progress.value / 30), 3)]
+        const messages = form.value.enableQualityCheck
+          ? [
+              '分析图片中...',
+              '检索相似爆款...',
+              '分析风格特征...',
+              '生成多张图片...',
+              'AI 裁判评分中...',
+              '选择最佳图片...'
+            ]
+          : [
+              '分析图片中...',
+              '检索相似爆款...',
+              '分析风格特征...',
+              '生成宣传图...'
+            ]
+        progressMessage.value = messages[Math.min(Math.floor(progress.value / 20), messages.length - 1)]
       } else if (data.status === 'completed') {
         progressMessage.value = '生成完成！'
         loading.value = false
@@ -245,7 +296,8 @@ const pollTaskStatus = async (taskId, productId) => {
           category: '',
           style: '',
           season: 'all_season',
-          sceneHint: ''
+          sceneHint: '',
+          enableQualityCheck: false
         }
 
         // 发送结果
@@ -262,7 +314,10 @@ const pollTaskStatus = async (taskId, productId) => {
             `/api/output/${data.result.product_id}/${data.result.product_id}_reference_1.png`,
             `/api/output/${data.result.product_id}/${data.result.product_id}_reference_2.png`,
             `/api/output/${data.result.product_id}/${data.result.product_id}_reference_3.png`
-          ].filter((_, i) => i < data.result.retrieved_count)
+          ].filter((_, i) => i < data.result.retrieved_count),
+          qualityScores: data.result.quality_scores || null,
+          allScores: data.result.all_scores || [],
+          qualityEnabled: data.result.quality_enabled || false
         })
 
         return
@@ -284,28 +339,6 @@ const pollTaskStatus = async (taskId, productId) => {
 
   poll()
 }
-
-onMounted(async () => {
-  // 加载品类和风格列表
-  try {
-    const [catRes, styleRes] = await Promise.all([
-      fetch('/api/categories'),
-      fetch('/api/styles')
-    ])
-
-    if (catRes.ok) {
-      const catData = await catRes.json()
-      categories.value = catData.categories || categories.value
-    }
-
-    if (styleRes.ok) {
-      const styleData = await styleRes.json()
-      styles.value = styleData.styles || styles.value
-    }
-  } catch (err) {
-    console.error('Failed to load options:', err)
-  }
-})
 </script>
 
 <style scoped>
@@ -523,6 +556,61 @@ onMounted(async () => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Advanced Options */
+.advanced-options {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.advanced-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.advanced-header svg {
+  transition: transform 0.3s;
+}
+
+.advanced-header svg.rotated {
+  transform: rotate(180deg);
+}
+
+.advanced-content {
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.option-hint {
+  margin-top: 0.5rem;
+  margin-left: 2.25rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 /* Error */

@@ -41,6 +41,9 @@ class GenerationRequest(BaseModel):
     style: str = Field(..., description="商品风格")
     season: str = Field(default="all_season", description="季节")
     scene_hint: str = Field(default="", description="场景提示")
+    enable_quality_check: bool = Field(default=False, description="是否启用质量评估")
+    num_generations: int = Field(default=1, description="生成图片数量（启用质量评估时有效）")
+    judge_model: str = Field(default="", description="裁判模型（空则使用默认模型）")
 
 
 class GenerationResponse(BaseModel):
@@ -179,7 +182,10 @@ def process_image_task(
     category: str,
     style: str,
     season: str,
-    scene_hint: str
+    scene_hint: str,
+    enable_quality_check: bool = False,
+    num_generations: int = 1,
+    judge_model: str = ""
 ):
     """后台处理图片生成任务"""
     try:
@@ -215,12 +221,14 @@ def process_image_task(
         )
         tasks[task_id]['progress'] = 0.4
 
-        # 检索相似爆款
+        # 检索相似爆款（自动去重和过滤）
         retrieved = components['retriever'].retrieve_similar_bestsellers(
             query_dense=query_dense.tolist(),
             query_sparse=query_sparse,
             category=category,
-            top_k=3
+            top_k=3,           # 期望返回数量
+            min_similarity=0.5, # 相似度阈值（0-1，越小越相关）
+            max_results=6       # 最多返回6张
         )
         tasks[task_id]['progress'] = 0.5
 
@@ -231,12 +239,37 @@ def process_image_task(
         ref_images = [r["image"] for r in retrieved if r["image"]]
         tasks[task_id]['progress'] = 0.6
 
-        # 分析风格并生成图片
-        style_prompt, generated = components['image_gen'].process_single_product(
-            new_product_image=new_img,
-            reference_images=ref_images,
-            scene_hint=scene_hint
-        )
+        # 根据是否启用质量评估选择不同的处理方式
+        judge_model_param = judge_model if judge_model else None
+
+        if enable_quality_check:
+            # 启用质量评估：生成单张图片并评分
+            result = components['image_gen'].process_with_quality_check(
+                new_product_image=new_img,
+                reference_images=ref_images,
+                scene_hint=scene_hint,
+                judge_model=judge_model_param
+            )
+
+            if result.get('error'):
+                raise Exception(result['error'])
+
+            style_prompt = result['style_prompt']
+            # 保存所有生成的图片，而不仅��是最佳图片
+            generated = result.get('all_images', [])
+            quality_scores = result.get('best_score', {})
+            all_scores = result.get('all_scores', [])
+        else:
+            # 标准模式：生成单张图片
+            style_prompt, generated, judge_result = components['image_gen'].process_single_product_with_judge(
+                new_product_image=new_img,
+                reference_images=ref_images,
+                scene_hint=scene_hint,
+                enable_judge=False  # 标准模式不启用裁判
+            )
+            quality_scores = judge_result if judge_result else {}
+            all_scores = []
+
         tasks[task_id]['progress'] = 0.8
 
         if not generated:
@@ -267,6 +300,12 @@ def process_image_task(
         with open(output_dir / f"{product_id}_style_prompt.txt", "w", encoding="utf-8") as f:
             f.write(style_prompt)
 
+        # 保存质量评分
+        if quality_scores:
+            import json
+            with open(output_dir / f"{product_id}_quality_scores.json", "w", encoding="utf-8") as f:
+                json.dump(quality_scores, f, ensure_ascii=False, indent=2)
+
         tasks[task_id]['progress'] = 1.0
         tasks[task_id]['status'] = 'completed'
         tasks[task_id]['result'] = {
@@ -277,7 +316,10 @@ def process_image_task(
             'generated_count': len(generated),
             'style_prompt': style_prompt,
             'generated_images': saved_paths,
-            'output_dir': str(output_dir)
+            'output_dir': str(output_dir),
+            'quality_scores': quality_scores,
+            'all_scores': all_scores,
+            'quality_enabled': enable_quality_check
         }
 
     except Exception as e:
@@ -319,7 +361,10 @@ async def upload_and_generate(
     category: str = Form(...),
     style: str = Form(...),
     season: str = Form(default="all_season"),
-    scene_hint: str = Form(default="")
+    scene_hint: str = Form(default=""),
+    enable_quality_check: bool = Form(default=False),
+    num_generations: int = Form(default=1),
+    judge_model: str = Form(default="")
 ):
     """
     上传图片并生成宣传图
@@ -329,6 +374,9 @@ async def upload_and_generate(
     - **style**: 商品风格（如：knitted, drawstring）
     - **season**: 季节（如：summer, winter, all_season）
     - **scene_hint**: 场景提示（可选）
+    - **enable_quality_check**: 是否启用质量评估（默认False）
+    - **num_generations**: 生成图片数量，启用质量评估时有效（默认1）
+    - **judge_model**: 裁判模型（空则使用默���模型）
     """
     # 验证文件类型
     if not file.content_type.startswith('image/'):
@@ -366,14 +414,18 @@ async def upload_and_generate(
             category,
             style,
             season,
-            scene_hint
+            scene_hint,
+            enable_quality_check,
+            num_generations,
+            judge_model
         )
 
+        quality_msg = "（启用质量评估）" if enable_quality_check else ""
         return GenerationResponse(
             task_id=task_id,
             status="pending",
             product_id=product_id,
-            message="图片上传成功，正在处理中"
+            message=f"图片上传成功，正在处理中{quality_msg}"
         )
 
     except Exception as e:
@@ -420,7 +472,21 @@ async def get_categories():
         products, _ = components['embed_gen'].load_products()
 
         categories = set(p.get('category', '') for p in products)
-        return {"categories": sorted(list(categories))}
+
+        # 中文标签映射
+        category_labels = {
+            'midi_dress': '中长裙',
+            'maxi_dress': '长裙',
+            'mini_dress': '短裙',
+            'skirt': '半身裙',
+            'top': '上装',
+            'pants': '裤装'
+        }
+
+        return {"categories": [
+            {"value": cat, "label": category_labels.get(cat, cat)}
+            for cat in sorted(list(categories))
+        ]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -433,7 +499,21 @@ async def get_styles():
         products, _ = components['embed_gen'].load_products()
 
         styles = set(p.get('style', '') for p in products)
-        return {"styles": sorted(list(styles))}
+
+        # 中文标签映射
+        style_labels = {
+            'casual': '休闲',
+            'formal': '正式',
+            'sporty': '运动',
+            'elegant': '优雅',
+            'vintage': '复古',
+            'modern': '现代'
+        }
+
+        return {"styles": [
+            {"value": style, "label": style_labels.get(style, style)}
+            for style in sorted(list(styles))
+        ]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

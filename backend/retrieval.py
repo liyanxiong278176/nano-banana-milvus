@@ -191,20 +191,24 @@ class BestsellerRetriever:
         query_sparse: dict,
         category: str,
         min_sales: int = MIN_SALES_COUNT,
-        top_k: int = 3
+        top_k: int = 3,
+        min_similarity: float = 0.5,
+        max_results: int = 6
     ) -> List[Dict]:
         """
-        检索相似爆款商品（带图片加载）
+        检索相似爆款商品（带图片加载、去重和相关性过滤）
 
         Args:
             query_dense: 稠密查询向量
             query_sparse: 稀疏查询向量
             category: 品类筛选
             min_sales: 最低销量
-            top_k: 返回数量
+            top_k: 期望返回数量（最终结果可能少于这个值）
+            min_similarity: 最低相似度阈值（RRF距离，越小越相关，0-1之间）
+            max_results: 最大返回数量
 
         Returns:
-            检索结果列表，包含商品信息和图片
+            检索结果列表，包含商品信息和图片（数量可变，取决于相关性和去重结果）
         """
         # 构建过滤表达式
         filter_expr = f'category == "{category}" and sales_count > {min_sales}'
@@ -212,21 +216,60 @@ class BestsellerRetriever:
         print(f"\n执行混合检索...")
         print(f"  品类: {category}")
         print(f"  最低销量: {min_sales}")
+        print(f"  期望返回: {top_k} 张")
 
-        # 执行检索
+        # 执行检索，获取更多候选结果以便去重和过滤
+        candidate_count = max(top_k * 4, 15)  # 获取更多候选
         results = self._hybrid_search(
             query_dense=query_dense,
             query_sparse=query_sparse,
             filter_expr=filter_expr,
-            top_k=top_k
+            top_k=candidate_count
         )
 
-        print(f"\n找到 {len(results)} 个相似爆款:")
+        # 过滤和去重
+        filtered_results = []
+        seen_product_bases = set()  # 用于检测同款不同色
+        seen_colors = set()  # 用于检测同色
+
+        for hit in results:
+            # RRF 距离过滤（越小越相关，范围约0-1）
+            if hit["distance"] > min_similarity:
+                continue
+
+            entity = hit["entity"]
+            product_id = entity["product_id"]
+            color = entity.get("color", "")
+
+            # 去重逻辑：
+            # 1. 检查是否已有相同颜色（避免返回同色不同款）
+            # 2. 检查产品基础ID（避免同款不同色）
+            product_base = product_id.rsplit('_', 1)[0] if '_' in product_id else product_id
+
+            skip_reason = None
+            if color in seen_colors:
+                skip_reason = f"已有相同颜色: {color}"
+            elif product_base in seen_product_bases:
+                skip_reason = f"已有同系列产品: {product_base}"
+
+            if skip_reason:
+                print(f"  跳过 {product_id}: {skip_reason}")
+                continue
+
+            seen_product_bases.add(product_base)
+            seen_colors.add(color)
+            filtered_results.append(hit)
+
+            # 达到最大数量时停止
+            if len(filtered_results) >= max_results:
+                break
+
+        print(f"\n找到 {len(filtered_results)} 个相关且不同的爆款:")
         print("-" * 60)
 
         # 加载图片并整理结果
         retrieved_with_images = []
-        for hit in results:
+        for hit in filtered_results:
             entity = hit["entity"]
             product_id = entity["product_id"]
 
@@ -236,6 +279,8 @@ class BestsellerRetriever:
                 ref_img = load_image(str(img_path))
             except FileNotFoundError:
                 ref_img = None
+                print(f"  警告: 图片未找到 {product_id}.jpg")
+                continue
 
             result = {
                 **entity,
