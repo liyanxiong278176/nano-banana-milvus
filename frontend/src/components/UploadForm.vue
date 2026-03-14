@@ -257,8 +257,12 @@ const handleSubmit = async () => {
 const pollTaskStatus = async (taskId, productId) => {
   const maxAttempts = 120 // 最多2分钟
   let attempts = 0
+  let hasCompleted = false // 防止重复触发完成事件
 
   const poll = async () => {
+    // 如果已经完成，不再处理
+    if (hasCompleted) return
+
     attempts++
 
     try {
@@ -286,7 +290,8 @@ const pollTaskStatus = async (taskId, productId) => {
               '生成宣传图...'
             ]
         progressMessage.value = messages[Math.min(Math.floor(progress.value / 20), messages.length - 1)]
-      } else if (data.status === 'completed') {
+      } else if (data.status === 'completed' && !hasCompleted) {
+        hasCompleted = true // 标记已完成，防止重复
         progressMessage.value = '生成完成！'
         loading.value = false
 
@@ -322,16 +327,19 @@ const pollTaskStatus = async (taskId, productId) => {
 
         return
       } else if (data.status === 'failed') {
+        hasCompleted = true
         throw new Error(data.error || '处理失败')
       }
 
-      if (attempts < maxAttempts) {
+      if (attempts < maxAttempts && !hasCompleted) {
         setTimeout(poll, 1000)
-      } else {
+      } else if (!hasCompleted) {
+        hasCompleted = true
         throw new Error('处理超时')
       }
 
     } catch (err) {
+      hasCompleted = true
       error.value = err.message || '处理失败，请重试'
       loading.value = false
     }

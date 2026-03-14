@@ -4,6 +4,7 @@ FastAPI 后端服务 - 电商 AI 生��流水线 API
 import asyncio
 import csv
 import io
+import json
 import os
 import time
 import uuid
@@ -42,7 +43,6 @@ class GenerationRequest(BaseModel):
     season: str = Field(default="all_season", description="季节")
     scene_hint: str = Field(default="", description="场景提示")
     enable_quality_check: bool = Field(default=False, description="是否启用质量评估")
-    num_generations: int = Field(default=1, description="生成图片数量（启用质量评估时有效）")
     judge_model: str = Field(default="", description="裁判模型（空则使用默认模型）")
 
 
@@ -184,7 +184,6 @@ def process_image_task(
     season: str,
     scene_hint: str,
     enable_quality_check: bool = False,
-    num_generations: int = 1,
     judge_model: str = ""
 ):
     """后台处理图片生成任务"""
@@ -227,7 +226,7 @@ def process_image_task(
             query_sparse=query_sparse,
             category=category,
             top_k=3,           # 期望返回数量
-            min_similarity=0.5, # 相似度阈值（0-1，越小越相关）
+            min_similarity=1.0, # 相似度阈值（放宽，允许更多结果）
             max_results=6       # 最多返回6张
         )
         tasks[task_id]['progress'] = 0.5
@@ -269,6 +268,7 @@ def process_image_task(
             )
             quality_scores = judge_result if judge_result else {}
             all_scores = []
+            individual_analyses = []
 
         tasks[task_id]['progress'] = 0.8
 
@@ -302,7 +302,6 @@ def process_image_task(
 
         # 保存质量评分
         if quality_scores:
-            import json
             with open(output_dir / f"{product_id}_quality_scores.json", "w", encoding="utf-8") as f:
                 json.dump(quality_scores, f, ensure_ascii=False, indent=2)
 
@@ -313,6 +312,16 @@ def process_image_task(
             'category': category,
             'style': style,
             'retrieved_count': len(retrieved),
+            'retrieved_products': [
+                {
+                    'product_id': r.get('product_id'),
+                    'color': r.get('color'),
+                    'style': r.get('style'),
+                    'image': f"/api/output/{product_id}/{product_id}_reference_{i+1}.png"
+                }
+                for i, r in enumerate(retrieved) if r.get("image")
+            ],
+            'individual_analyses': individual_analyses if enable_quality_check else [],
             'generated_count': len(generated),
             'style_prompt': style_prompt,
             'generated_images': saved_paths,
@@ -363,7 +372,6 @@ async def upload_and_generate(
     season: str = Form(default="all_season"),
     scene_hint: str = Form(default=""),
     enable_quality_check: bool = Form(default=False),
-    num_generations: int = Form(default=1),
     judge_model: str = Form(default="")
 ):
     """
@@ -375,7 +383,6 @@ async def upload_and_generate(
     - **season**: 季节（如：summer, winter, all_season）
     - **scene_hint**: 场景提示（可选）
     - **enable_quality_check**: 是否启用质量评估（默认False）
-    - **num_generations**: 生成图片数量，启用质量评估时有效（默认1）
     - **judge_model**: 裁判模型（空则使用默���模型）
     """
     # 验证文件类型
@@ -416,7 +423,6 @@ async def upload_and_generate(
             season,
             scene_hint,
             enable_quality_check,
-            num_generations,
             judge_model
         )
 

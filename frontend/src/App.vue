@@ -121,7 +121,11 @@ import ResultsGallery from './components/ResultsGallery.vue'
 const results = ref([])
 
 const handleGenerated = (result) => {
-  results.value.unshift(result)
+  // 检查是否已存在相同 productId 的结果，防止重复添加
+  const existingIndex = results.value.findIndex(r => r.productId === result.productId)
+  if (existingIndex === -1) {
+    results.value.unshift(result)
+  }
 }
 </script>
 

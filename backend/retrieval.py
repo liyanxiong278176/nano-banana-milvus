@@ -230,7 +230,6 @@ class BestsellerRetriever:
         # 过滤和去重
         filtered_results = []
         seen_product_bases = set()  # 用于检测同款不同色
-        seen_colors = set()  # 用于检测同色
 
         for hit in results:
             # RRF 距离过滤（越小越相关，范围约0-1）
@@ -239,25 +238,15 @@ class BestsellerRetriever:
 
             entity = hit["entity"]
             product_id = entity["product_id"]
-            color = entity.get("color", "")
 
-            # 去重逻辑：
-            # 1. 检查是否已有相同颜色（避免返回同色不同款）
-            # 2. 检查产品基础ID（避免同款不同色）
+            # 去重逻辑：检查产品基础ID（避免同款不同色）
             product_base = product_id.rsplit('_', 1)[0] if '_' in product_id else product_id
 
-            skip_reason = None
-            if color in seen_colors:
-                skip_reason = f"已有相同颜色: {color}"
-            elif product_base in seen_product_bases:
-                skip_reason = f"已有同系列产品: {product_base}"
-
-            if skip_reason:
-                print(f"  跳过 {product_id}: {skip_reason}")
+            if product_base in seen_product_bases:
+                print(f"  跳过 {product_id}: 已有同系列产品 {product_base}")
                 continue
 
             seen_product_bases.add(product_base)
-            seen_colors.add(color)
             filtered_results.append(hit)
 
             # 达到最大数量时停止

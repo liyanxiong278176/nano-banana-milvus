@@ -13,6 +13,10 @@ from config import DEFAULT_ASPECT_RATIO, DEFAULT_IMAGE_SIZE
 from utils import image_to_uri, extract_images
 
 
+# 常量定义
+MAX_REFERENCE_IMAGES_FOR_SCORING = 2  # 质量评估时最多使用的参考图数量
+
+
 class ImageQualityJudge:
     """图片质量裁判官 - 使用多模态 LLM 评分"""
 
@@ -53,7 +57,7 @@ class ImageQualityJudge:
 
         # 如果有参考图，也加入评估
         if reference_images:
-            for ref in reference_images[:2]:  # 最多2张参考图
+            for ref in reference_images[:MAX_REFERENCE_IMAGES_FOR_SCORING]:
                 content.append({"type": "image_url", "image_url": {"url": image_to_uri(ref)}})
 
         score_prompt = self._build_score_prompt(len(reference_images) if reference_images else 0)
@@ -69,30 +73,44 @@ class ImageQualityJudge:
 
             content_text = response.choices[0].message.content
 
-            # 提取 JSON
-            json_match = re.search(r'\{[^}]+\}', content_text)
-            if json_match:
-                try:
-                    scores = json.loads(json_match.group())
-                    # 计算平均分
-                    if isinstance(scores, dict):
-                        avg_score = sum(scores.values()) / len(scores)
-                        scores['average'] = round(avg_score, 2)
-                    return scores
-                except json.JSONDecodeError:
-                    pass
+            # 尝试多种方式解析 JSON
+            scores = None
+
+            # 方法1: 直接解析整个响应
+            try:
+                scores = json.loads(content_text.strip())
+            except json.JSONDecodeError:
+                pass
+
+            # 方法2: 使用正则匹配 JSON 对象
+            if scores is None:
+                # 匹配可能嵌套的 JSON
+                json_match = re.search(r'\{(?:[^{}]|\{[^{}]*\})*\}', content_text, re.DOTALL)
+                if json_match:
+                    try:
+                        scores = json.loads(json_match.group())
+                    except json.JSONDecodeError:
+                        pass
+
+            # 成功解析，计算平均分
+            if scores and isinstance(scores, dict):
+                avg_score = sum(scores.values()) / len(scores)
+                scores['average'] = round(avg_score, 2)
+                scores['is_fallback'] = False
+                return scores
 
         except Exception as e:
             print(f"评分失败: {e}")
 
-        # 默认分数
+        # 默认分数（标识为后备值）
         return {
             "clothing_accuracy": 3,
             "pose_naturalness": 3,
             "scene_quality": 3,
             "lighting_quality": 3,
             "commercial_value": 3,
-            "average": 3.0
+            "average": 3.0,
+            "is_fallback": True  # 标识这是默认值
         }
 
     def _build_score_prompt(self, has_references: int = 0) -> str:
@@ -203,17 +221,57 @@ class ImageGenerator:
         reference_images: List[Image.Image]
     ) -> str:
         """
-        使用 Qwen3.5 分析爆款图片风格
+        使用 Qwen3.5 分析爆款图片风格（综合分析）
 
         Args:
             reference_images: 参考爆款图片列表
 
         Returns:
-            风格描述 prompt
+            风格描述 prompt（基于���有图片的综合分析）
         """
-        print("\n使用 Qwen3.5 分析爆款风格...")
+        print(f"\n使用 Qwen3.5 分析爆款风格...")
+        print(f"  传入参考图数量: {len(reference_images)}")
 
-        # 构建多模态输入
+        if not reference_images:
+            print("  警告: 没有参考图！")
+            return "专业电商宣传照，简洁背景，柔和光线"
+
+        # 对每张图单独分析风格
+        individual_analyses = []
+        for i, ref_img in enumerate(reference_images):
+            print(f"  分析第 {i+1}/{len(reference_images)} 张参考图...")
+
+            content = [
+                {"type": "image_url", "image_url": {"url": image_to_uri(ref_img)}},
+                {"type": "text", "text": (
+                    "这是一张时尚产品宣传照片���\n\n"
+                    "请分析这张图片的视觉风格，从以下维度：\n"
+                    "1. 场景/背景设置\n"
+                    "2. 光线和色调\n"
+                    "3. 模特姿势和构图\n"
+                    "4. 整体氛围和美学风格\n\n"
+                    "请用一句话（50字以内）总结这张图片的风格。\n"
+                    "只输出风格描述，不要其他内容。"
+                )},
+            ]
+
+            try:
+                response = self.client.chat.completions.create(
+                    model=LLM_MODEL,
+                    messages=[{"role": "user", "content": content}],
+                    max_tokens=200,
+                    temperature=0.7,
+                )
+                analysis = response.choices[0].message.content.strip()
+                individual_analyses.append(analysis)
+                print(f"    图{i+1}风格: {analysis}")
+            except Exception as e:
+                print(f"    图{i+1}分析失败: {e}")
+                individual_analyses.append(f"参考图{i+1}")
+
+        # 基于所有图片的综合分析（生成最终的风格 prompt）
+        print(f"\n基于 {len(reference_images)} 张参考图进行综合分析...")
+
         content = [
             {
                 "type": "image_url",
@@ -245,9 +303,13 @@ class ImageGenerator:
         )
 
         style_prompt = response.choices[0].message.content.strip()
-        print(f"\n风格分析结果:\n{style_prompt}\n")
+        print(f"\n综合风格分析结果:\n{style_prompt}\n")
 
-        return style_prompt
+        # 返回综合风格和每张图的分析
+        return {
+            "combined_style": style_prompt,
+            "individual_analyses": individual_analyses
+        }
 
     def _get_model_modalities(self, model: str) -> List[str]:
         """
@@ -269,7 +331,7 @@ class ImageGenerator:
     def generate_promotional_photo(
         self,
         new_product_image: Image.Image,
-        reference_image: Image.Image,
+        reference_images: List[Image.Image],
         style_prompt: str,
         scene_hint: str = "",
         aspect_ratio: str = DEFAULT_ASPECT_RATIO,
@@ -280,7 +342,7 @@ class ImageGenerator:
 
         Args:
             new_product_image: 新品平铺图
-            reference_image: 参考爆款图
+            reference_images: 参考爆款图列表（可多张）
             style_prompt: LLM 分析的风格描述
             scene_hint: 场景提示
             aspect_ratio: 宽高比 (3:4, 1:1, 4:1 等)
@@ -289,15 +351,25 @@ class ImageGenerator:
         Returns:
             生成的图片列表
         """
+        ref_count = len(reference_images)
         print(f"\n使用 {IMAGE_GEN_MODEL} 生成宣传图...")
+        print(f"  参考图数量: {ref_count}")
         print(f"  宽高比: {aspect_ratio}")
         print(f"  分辨率: {image_size}")
 
-        gen_prompt = (
-            f"图片1是一件新的服装产品（平铺照片），图片2是我们畅销目录中的参考宣传照。\n\n"
-            f"请生成一张专业的电商宣传照片，展示一位女性模特穿着图片1中的服装。\n\n"
-            f"风格指导：{style_prompt}\n\n"
-        )
+        # 构建 prompt，根据参考图数量调整描述
+        if ref_count == 1:
+            gen_prompt = (
+                f"图片1是一件新的服装产品（平铺照片），图片2是我们畅销目录中的参考宣传照。\n\n"
+                f"请生成一张专业的电商宣传照片，展示一位女性模特穿着图片1中的服装。\n\n"
+                f"风格指导：{style_prompt}\n\n"
+            )
+        else:
+            gen_prompt = (
+                f"图片1是一件新的服装产品（平铺照片），图片2到图片{ref_count + 1}是我们畅销目录中的{ref_count}张参考宣传照。\n\n"
+                f"请生成一张专业的电商宣传照片，展示一位女性模特穿着图片1中的服装。\n\n"
+                f"风格指导（基于所有参考图分析）：{style_prompt}\n\n"
+            )
 
         if scene_hint:
             gen_prompt += f"场景提示：{scene_hint}\n\n"
@@ -306,17 +378,19 @@ class ImageGenerator:
             f"要求：\n"
             f"- 全身照，照片级真实感，高质量\n"
             f"- 服装必须与图片1完全一致\n"
-            f"- 照片风格和氛围应与图片2匹配\n"
+            f"- 照片风格和氛围应与参考宣传照匹配\n"
             f"- 服装与模特身体的贴合自然\n"
             f"- 无可见标签或吊牌\n"
             f"- 细节清晰，专业布光"
         )
 
+        # 构建内容：新品图 + 所有参考图 + prompt
         gen_content = [
             {"type": "image_url", "image_url": {"url": image_to_uri(new_product_image)}},
-            {"type": "image_url", "image_url": {"url": image_to_uri(reference_image)}},
-            {"type": "text", "text": gen_prompt},
         ]
+        for ref_img in reference_images:
+            gen_content.append({"type": "image_url", "image_url": {"url": image_to_uri(ref_img)}})
+        gen_content.append({"type": "text", "text": gen_prompt})
 
         # 根据模型类型使用正确的 modalities
         modalities = self._get_model_modalities(IMAGE_GEN_MODEL)
@@ -361,12 +435,13 @@ class ImageGenerator:
             (风格描述, 生成图片列表)
         """
         # 1. 分析风格
-        style_prompt = self.analyze_style_with_llm(reference_images)
+        style_analysis = self.analyze_style_with_llm(reference_images)
+        style_prompt = style_analysis["combined_style"]
 
         # 2. 生成图片
         generated = self.generate_promotional_photo(
             new_product_image=new_product_image,
-            reference_image=reference_images[0],
+            reference_images=reference_images,
             style_prompt=style_prompt,
             scene_hint=scene_hint
         )
@@ -398,13 +473,14 @@ class ImageGenerator:
         print(f"将生成 1 张图片并进行 AI 质量评分")
 
         # 1. 分析风格
-        style_prompt = self.analyze_style_with_llm(reference_images)
+        style_analysis = self.analyze_style_with_llm(reference_images)
+        style_prompt = style_analysis["combined_style"]
 
         # 2. 生成单张图片
         print(f"\n生成宣传图...")
         generated = self.generate_promotional_photo(
             new_product_image=new_product_image,
-            reference_image=reference_images[0],
+            reference_images=reference_images,
             style_prompt=style_prompt,
             scene_hint=scene_hint
         )
@@ -449,6 +525,8 @@ class ImageGenerator:
 
         return {
             'style_prompt': style_prompt,
+            'style_analysis': style_analysis,
+            'individual_analyses': style_analysis.get('individual_analyses', []),
             'best_image': generated_image,
             'all_images': [generated_image],
             'best_score': score_result,
@@ -479,12 +557,13 @@ class ImageGenerator:
             (风格描述, 生成图片列表, 评分结果字典)
         """
         # 1. 分析风格
-        style_prompt = self.analyze_style_with_llm(reference_images)
+        style_analysis = self.analyze_style_with_llm(reference_images)
+        style_prompt = style_analysis["combined_style"]
 
         # 2. 生成图片
         generated = self.generate_promotional_photo(
             new_product_image=new_product_image,
-            reference_image=reference_images[0],
+            reference_images=reference_images,
             style_prompt=style_prompt,
             scene_hint=scene_hint
         )

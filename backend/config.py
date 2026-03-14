@@ -24,7 +24,6 @@ for dir_path in [IMAGE_DIR, NEW_PRODUCT_DIR, OUTPUT_DIR]:
 # 从环境变量获取 API Key，如果没有设置则使用占位符
 OPENROUTER_API_KEY = os.environ.get(
     "OPENROUTER_API_KEY",
-    "your-openrouter-api-key-here"
 )
 
 # ==================== 模型配置 ====================
