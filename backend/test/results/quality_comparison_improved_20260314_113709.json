@@ -1,0 +1,84 @@
+{
+  "scheme_averages": {
+    "baseline": 4.6,
+    "original": 4,
+    "multi_ref": 4,
+    "single_ref": 4,
+    "retrieval": 4.6
+  },
+  "best_scheme": "baseline",
+  "detailed_results": [
+    {
+      "new_id": "NEW001",
+      "schemes": {
+        "baseline": {
+          "success": true,
+          "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison_improved\\NEW001_baseline.png",
+          "scores": {
+            "clothing_accuracy": 5,
+            "pose_naturalness": 4,
+            "scene_quality": 5,
+            "lighting_quality": 4,
+            "commercial_value": 5
+          },
+          "avg_score": 4.6
+        },
+        "original": {
+          "success": true,
+          "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison_improved\\NEW001_original.png",
+          "scores": {
+            "clothing_accuracy": 4,
+            "pose_naturalness": 3,
+            "scene_quality": 5,
+            "lighting_quality": 4,
+            "commercial_value": 4
+          },
+          "avg_score": 4,
+          "style_prompt": "A woman in a flowing, light-colored dress with delicate floral embroidery, standing gracefully in a sun-dappled garden with soft, natural lighting. The dress features a flattering waist tie and billowing sleeves. She smiles warmly, framed by lush greenery, evoking a serene, romantic, and effortless summer aesthetic."
+        },
+        "multi_ref": {
+          "success": true,
+          "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison_improved\\NEW001_multi_ref.png",
+          "scores": {
+            "clothing_accuracy": 4,
+            "pose_naturalness": 3,
+            "scene_quality": 5,
+            "lighting_quality": 4,
+            "commercial_value": 4
+          },
+          "avg_score": 4
+        },
+        "single_ref": {
+          "success": true,
+          "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison_improved\\NEW001_single_ref.png",
+          "scores": {
+            "clothing_accuracy": 4,
+            "pose_naturalness": 3,
+            "scene_quality": 5,
+            "lighting_quality": 4,
+            "commercial_value": 4
+          },
+          "avg_score": 4
+        },
+        "retrieval": {
+          "success": true,
+          "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison_improved\\NEW001_retrieval.png",
+          "scores": {
+            "clothing_accuracy": 5,
+            "pose_naturalness": 4,
+            "scene_quality": 5,
+            "lighting_quality": 4,
+            "commercial_value": 5
+          },
+          "avg_score": 4.6,
+          "style_prompt": "A minimalist studio shot of a woman wearing a delicate white lace-trimmed slip dress, softly lit with natural light against a plain white background, focusing on the elegant hemline and smooth fabric texture, evoking a serene, timeless, and feminine aesthetic.",
+          "retrieved_ids": [
+            "SKU019",
+            "SKU016",
+            "SKU018"
+          ]
+        }
+      }
+    }
+  ]
+}

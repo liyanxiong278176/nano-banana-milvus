@@ -1,0 +1,12 @@
+{
+  "timestamp": "20260314_104146",
+  "retrieval_metrics": {
+    "total_tests": 5,
+    "successful_tests": 5,
+    "avg_category_match_rate": 1.0,
+    "avg_ndcg": 1.0,
+    "top1_accuracy": 1.0,
+    "top3_recall": 1.0
+  },
+  "cost_analysis_report": "{'error': \"'gbk' codec can't encode character '\\\\xa5' in position 19: illegal multibyte sequence\"}"
+}

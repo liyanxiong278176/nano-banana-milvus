@@ -1,0 +1,85 @@
+{
+  "timestamp": "20260314_111805",
+  "summary": {
+    "total_tests": 2,
+    "successful_tests": 2,
+    "overall_baseline": 4.6,
+    "overall_with_reference": 4,
+    "overall_improvement": -0.5999999999999996,
+    "improvement_percent": -13.04347826086956
+  },
+  "dimension_comparison": {
+    "baseline": {
+      "clothing_accuracy": 5,
+      "pose_naturalness": 4,
+      "scene_quality": 5,
+      "lighting_quality": 4,
+      "commercial_value": 5
+    },
+    "with_reference": {
+      "clothing_accuracy": 4,
+      "pose_naturalness": 3,
+      "scene_quality": 5,
+      "lighting_quality": 4,
+      "commercial_value": 4
+    }
+  },
+  "detailed_results": [
+    {
+      "new_id": "NEW001",
+      "baseline": {
+        "success": true,
+        "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison\\NEW001_baseline.png",
+        "scores": {
+          "clothing_accuracy": 5,
+          "pose_naturalness": 4,
+          "scene_quality": 5,
+          "lighting_quality": 4,
+          "commercial_value": 5
+        },
+        "avg_score": 4.6
+      },
+      "with_reference": {
+        "success": true,
+        "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison\\NEW001_with_reference.png",
+        "scores": {
+          "clothing_accuracy": 4,
+          "pose_naturalness": 3,
+          "scene_quality": 5,
+          "lighting_quality": 4,
+          "commercial_value": 4
+        },
+        "avg_score": 4
+      },
+      "improvement": -0.5999999999999996
+    },
+    {
+      "new_id": "NEW002",
+      "baseline": {
+        "success": true,
+        "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison\\NEW002_baseline.png",
+        "scores": {
+          "clothing_accuracy": 5,
+          "pose_naturalness": 4,
+          "scene_quality": 5,
+          "lighting_quality": 4,
+          "commercial_value": 5
+        },
+        "avg_score": 4.6
+      },
+      "with_reference": {
+        "success": true,
+        "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison\\NEW002_with_reference.png",
+        "scores": {
+          "clothing_accuracy": 4,
+          "pose_naturalness": 3,
+          "scene_quality": 5,
+          "lighting_quality": 4,
+          "commercial_value": 4
+        },
+        "avg_score": 4
+      },
+      "improvement": -0.5999999999999996
+    }
+  ]
+}
