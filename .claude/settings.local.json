@@ -13,7 +13,9 @@
       "Bash(rm:*)",
       "Bash(dir D:\\\\agent_learning\\\\nano-banana-milvus\\\\backend:*)",
       "Bash(dir D:\\\\agent_learning\\\\nano-banana-milvus\\\\new_products:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)"
     ]
   }
 }
