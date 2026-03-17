@@ -25,7 +25,7 @@ class ImageQualityJudge:
         初始化裁判官
 
         Args:
-            model: 指定裁判模型，None 则使用配置的 LLM_MODEL
+            model: 指定裁判模��，None 则使用配置的 LLM_MODEL
         """
         self.client = OpenAI(
             api_key=OPENROUTER_API_KEY,
@@ -223,13 +223,15 @@ class ImageGenerator:
         """
         使用 Qwen3.5 分析爆款图片风格（综合分析）
 
+        【第一性原则】只提取拍摄风格（场景、光线、构图），绝不描述服装款式
+
         Args:
             reference_images: 参考爆款图片列表
 
         Returns:
-            风格描述 prompt（基于���有图片的综合分析）
+            风格描述 prompt（仅包含拍摄风格，不包含服装款式）
         """
-        print(f"\n使用 Qwen3.5 分析爆款风格...")
+        print(f"\n使用 Qwen3.5 分析爆款拍摄风格...")
         print(f"  传入参考图数量: {len(reference_images)}")
 
         if not reference_images:
@@ -244,14 +246,16 @@ class ImageGenerator:
             content = [
                 {"type": "image_url", "image_url": {"url": image_to_uri(ref_img)}},
                 {"type": "text", "text": (
-                    "这是一张时尚产品宣传照片���\n\n"
-                    "请分析这张图片的视觉风格，从以下维度：\n"
-                    "1. 场景/背景设置\n"
-                    "2. 光线和色调\n"
-                    "3. 模特姿势和构图\n"
-                    "4. 整体氛围和美学风格\n\n"
-                    "请用一句话（50字以内）总结这张图片的风格。\n"
-                    "只输出风格描述，不要其他内容。"
+                    "这是一张时尚产品宣传照片。\n\n"
+                    "【核心原则】你只需要分析**摄影拍摄风格**，绝对不要描述模特身上的服装款式！\n\n"
+                    "请仅从以下维度分析这张图片的**拍摄风格**：\n"
+                    "1. 场景/背景设置（如：纯白背景、自然户外场景、极简室内等）\n"
+                    "2. 光线和色调（如：柔和自然光、侧光、暖色调、冷色调等）\n"
+                    "3. 模特姿势和构图（如：全身站姿、坐姿、动态抓拍等）\n"
+                    "4. 整体氛围和美学风格（如：极简主义、商务专业、清新自然等）\n\n"
+                    "【严格禁止】不要描述服装的款式、颜色、材质、图案！\n\n"
+                    "请用一句话（50字以内）总结这张图片的**拍摄风格**。\n"
+                    "只输出拍摄风格描述，不要其他内容。"
                 )},
             ]
 
@@ -264,7 +268,7 @@ class ImageGenerator:
                 )
                 analysis = response.choices[0].message.content.strip()
                 individual_analyses.append(analysis)
-                print(f"    图{i+1}风格: {analysis}")
+                print(f"    图{i+1}拍摄风格: {analysis}")
             except Exception as e:
                 print(f"    图{i+1}分析失败: {e}")
                 individual_analyses.append(f"参考图{i+1}")
@@ -284,13 +288,15 @@ class ImageGenerator:
             "type": "text",
             "text": (
                 "这些是我们店铺最畅销的时尚产品宣传照片。\n\n"
-                "请分析它们的共同视觉风格，从以下维度：\n"
+                "【核心原则】你只需要分析**摄影拍摄风格**，绝对不要描述服装款式！\n\n"
+                "请仅从以下维度分析它们的**拍摄风格**：\n"
                 "1. 场景/背景设置\n"
                 "2. 光线和色调\n"
                 "3. 模特姿势和构图\n"
                 "4. 整体氛围和美学风格\n\n"
+                "【严格禁止】不要描述服装的款式、颜色、材质、图案！\n\n"
                 "基于以上分析，请写一段简洁的图像生成提示词（100字以内），"
-                "描述模特穿着新服装的场景。\n"
+                "描述**拍摄场景、光线、构图风格**（不涉及具体服装款式）。\n"
                 "只输出提示词，不要输出其他内容。"
             ),
         })
@@ -303,7 +309,7 @@ class ImageGenerator:
         )
 
         style_prompt = response.choices[0].message.content.strip()
-        print(f"\n综合风格分析结果:\n{style_prompt}\n")
+        print(f"\n综合拍摄风格分析结果:\n{style_prompt}\n")
 
         # 返回综合风格和每张图的分析
         return {
@@ -340,10 +346,12 @@ class ImageGenerator:
         """
         使用图像生成模型生成宣传图
 
+        【第一性原则】模特身上穿的必须是用户上传的服装，参考图只提供拍摄风格
+
         Args:
-            new_product_image: 新品平铺图
-            reference_images: 参考爆款图列表（可多张）
-            style_prompt: LLM 分析的风格描述
+            new_product_image: 新品平铺图（必须100%还原的服装）
+            reference_images: 参考爆款图列表（仅用于提取拍摄风格）
+            style_prompt: LLM 分析的拍摄风格描述
             scene_hint: 场景提示
             aspect_ratio: 宽高比 (3:4, 1:1, 4:1 等)
             image_size: 分辨率 (512px, 1K, 2K, 4K)
@@ -360,37 +368,41 @@ class ImageGenerator:
         # 构建 prompt，根据参考图数量调整描述
         if ref_count == 1:
             gen_prompt = (
-                f"图片1是一件新的服装产品（平铺照片），图片2是我们畅销目录中的参考宣传照。\n\n"
+                f"【第一性原则】图片1是用户上传的服装平铺图，必须100%还原这件服装！\n"
+                f"图片2是参考图，仅用于参考**拍摄风格**（场景、光线、构图），不能模仿它的服装款式！\n\n"
                 f"请生成一张专业的电商宣传照片，展示一位女性模特穿着图片1中的服装。\n\n"
-                f"风格指导：{style_prompt}\n\n"
+                f"拍摄风格参考（不含服装）：{style_prompt}\n\n"
             )
         else:
-            gen_prompt = (
-                f"图片1是一件新的服装产品（平铺照片），图片2到图片{ref_count + 1}是我们畅销目录中的{ref_count}张参考宣传照。\n\n"
-                f"请生成一张专业的电商宣传照片，展示一位女性模特穿着图片1中的服装。\n\n"
-                f"风格指导（基于所有参考图分析）：{style_prompt}\n\n"
-            )
+            gen_prompt = f"""
+【第一性原则·最高优先级】第一张图片是用户上传的服装，模特身上必须100%还原这件服装！
+版型、材质、颜色、款式、细节完全一致，绝对不允许更改服装款式！
+
+后续图片（图片2及以后）是参考图，仅用于参考**拍摄风格**（场景、光线、构图），
+绝对不能模仿参考图里的服装款式、颜色、材质！
+
+请生成一张专业的电商宣传照片，展示一位女性模特穿着**第一张图片中的服装**。
+
+拍摄风格参考（不含服装）：{style_prompt}
+
+【硬性规则·违反即失败】：
+1. 服装必须与第一张用户上传的原图完全一致，版型、颜色、材质、细节100%还原
+2. 后续参考图仅提供拍摄风格、光线、场景构图参考，绝对不能使用参考图里的服装款式
+3. 全身照，照片级真实感，8K高清
+4. 服装与模特身体贴合自然，无变形、无穿模
+5. 无可见标签或吊牌，细节清晰，专业商业布光
+"""
 
         if scene_hint:
-            gen_prompt += f"场景提示：{scene_hint}\n\n"
+            gen_prompt += f"\n场景提示：{scene_hint}\n"
 
-        gen_prompt += (
-            f"要求：\n"
-            f"- 全身照，照片级真实感，高质量\n"
-            f"- 服装必须与图片1完全一致\n"
-            f"- 照片风格和氛围应与参考宣传照匹配\n"
-            f"- 服装与模特身体的贴合自然\n"
-            f"- 无可见标签或吊牌\n"
-            f"- 细节清晰，专业布光"
-        )
-
-        # 构建内容：新品图 + 所有参考图 + prompt
+        # 【第一性原则】只传用户上传的服装图，不传参考图！
+        # 参考图的拍摄风格已经通过 LLM 分析提取到 style_prompt 中了
+        # 如果传参考图给生成模型，模型会同时参考服装款式，导致生成的服装变化
         gen_content = [
             {"type": "image_url", "image_url": {"url": image_to_uri(new_product_image)}},
+            {"type": "text", "text": gen_prompt}
         ]
-        for ref_img in reference_images:
-            gen_content.append({"type": "image_url", "image_url": {"url": image_to_uri(ref_img)}})
-        gen_content.append({"type": "text", "text": gen_prompt})
 
         # 根据模型类型使用正确的 modalities
         modalities = self._get_model_modalities(IMAGE_GEN_MODEL)

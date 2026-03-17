@@ -258,6 +258,7 @@ def process_image_task(
             generated = result.get('all_images', [])
             quality_scores = result.get('best_score', {})
             all_scores = result.get('all_scores', [])
+            individual_analyses = result.get('individual_analyses', [])
         else:
             # 标准模式：生成单张图片
             style_prompt, generated, judge_result = components['image_gen'].process_single_product_with_judge(
