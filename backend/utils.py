@@ -67,7 +67,7 @@ def get_image_embeddings(images: List[Image.Image], batch_size: int = 5) -> np.n
             "https://openrouter.ai/api/v1/embeddings",
             headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
             json={"model": EMBED_MODEL, "input": inputs},
-            timeout=120,
+            timeout=300,  # 增加到 5 分钟
         )
 
         data = resp.json()
@@ -98,7 +98,7 @@ def get_text_embedding(text: str) -> np.ndarray:
         "https://openrouter.ai/api/v1/embeddings",
         headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
         json={"model": EMBED_MODEL, "input": text},
-        timeout=60,
+        timeout=180,  # 增加到 3 分钟
     )
     return np.array(resp.json()["data"][0]["embedding"], dtype=np.float32)
 

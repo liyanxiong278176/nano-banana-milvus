@@ -102,11 +102,14 @@ class FashionImagePipeline:
         Returns:
             处理结果字典
         """
-        print("\n" + "=" * 60)
-        print(f"处理新品: {new_product_id}")
-        print("=" * 60)
+        print("\n" + "╔" + "═" * 58 + "╗")
+        print("║" + " " * 15 + "电商 AI 生图流水线" + " " * 25 + "║")
+        print("║" + "═" * 58 + "║")
+        print(f"║  新品ID: {new_product_id}                              ║")
+        print("╚" + "═" * 58 + "╝")
 
         # 加载新品数据
+        print("\n[1/5] 加载新品数据...")
         new_products = self.embed_gen.load_new_products()
         new_product = next(
             (p for p in new_products if p["new_id"] == new_product_id),
@@ -114,25 +117,35 @@ class FashionImagePipeline:
         )
 
         if not new_product:
-            print(f"✗ 找不到新品 {new_product_id}")
+            print(f"  ✗ 找不到新品 {new_product_id}")
             return {"new_id": new_product_id, "success": False, "error": "未找到"}
 
-        print(f"  品类: {new_product['category']}")
-        print(f"  风格: {new_product['style']}")
-        print(f"  场景: {new_product.get('prompt_hint', '')}")
+        print(f"  ✓ 品类: {new_product['category']}")
+        print(f"  ✓ 风格: {new_product['style']}")
+        print(f"  ✓ 季节: {new_product.get('season', 'N/A')}")
+        print(f"  ✓ 场景: {new_product.get('prompt_hint', 'N/A')}")
 
         try:
             # 编码新品
+            print("\n[2/5] 编码新品向量...")
             query_dense, query_sparse, new_img = self.embed_gen.encode_new_product(
                 new_product, self.tfidf
             )
+            print(f"  ✓ Dense向量: {len(query_dense)}维")
+            print(f"  ✓ Sparse向量: {len(query_sparse)}个非零项")
 
-            # 检索相似爆款
+            # 检索相似爆款（循环检索 + 查询重写 + 质量评估）
+            print("\n[3/5] 检索相似爆款...")
             retrieved = self.retriever.retrieve_similar_bestsellers(
                 query_dense=query_dense.tolist(),
                 query_sparse=query_sparse,
                 category=new_product["category"],
-                top_k=TOP_K_RETRIEVAL
+                top_k=TOP_K_RETRIEVAL,
+                enable_cycle=True,                      # 启用循环检索状态机
+                query_category=new_product.get("category", ""),  # 用于质量评估
+                query_style=new_product.get("style", ""),        # 用于质量评估
+                query_season=new_product.get("season", ""),      # 用于质量评估
+                query_scene_hint=new_product.get("prompt_hint", "")  # 用于质量评估
             )
 
             if not retrieved:
@@ -145,8 +158,11 @@ class FashionImagePipeline:
 
             # 提取参考图片
             ref_images = [r["image"] for r in retrieved if r["image"]]
+            print(f"  ✓ 检索完成: 获得 {len(retrieved)} 个参考商品")
 
             # 分析风格并生成图片
+            print("\n[4/5] 分析风格并生成宣传图...")
+            print(f"  模型: FLUX.2 Klein")
             style_prompt, generated = self.image_gen.process_single_product(
                 new_product_image=new_img,
                 reference_images=ref_images,
@@ -163,12 +179,17 @@ class FashionImagePipeline:
 
             # 保存结果
             if save_output:
+                print("\n[5/5] 保存结果文件...")
                 self._save_output(
                     new_product_id, new_img, retrieved,
                     generated, style_prompt
                 )
 
-            print(f"  ✓ 完成: 生成 {len(generated)} 张图片")
+            print(f"\n  ✓ 完成: 生成 {len(generated)} 张图片")
+
+            print("\n" + "╔" + "═" * 58 + "╗")
+            print("║" + " " * 20 + "任务完成!" + " " * 24 + "║")
+            print("╚" + "═" * 58 + "╝\n")
 
             return {
                 "new_id": new_product_id,

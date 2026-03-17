@@ -30,8 +30,9 @@ OPENROUTER_API_KEY = os.environ.get(
 # 所有模型通过 OpenRouter API 调用，无需本地 GPU
 EMBED_MODEL = "nvidia/llama-nemotron-embed-vl-1b-v2"  # 免费，支持图像+文本 → 2048维
 EMBED_DIM = 2048
-LLM_MODEL = "qwen/qwen3-vl-8b-instruct"  # 风格分析（支持视觉）
-IMAGE_GEN_MODEL = "bytedance-seed/seedream-4.5"  # ByteDance Seedream (在中国可用)
+LLM_MODEL = "qwen/qwen3-vl-235b-a22b-thinking"  # 风格分析（免费，支持视觉+视频）
+IMAGE_GEN_MODEL = "black-forest-labs/flux.2-klein-4b"  # FLUX.2 Klein (价格更低: 首$0.014/MP, 后续$0.001/MP)
+LIGHT_LLM_MODEL = "qwen/qwen3-vl-235b-a22b-thinking"  # 免费模型，用于检索质量评估
 
 # ==================== Milvus 配置 ====================
 MILVUS_URI = "http://localhost:19530"

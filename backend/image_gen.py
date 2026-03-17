@@ -7,10 +7,14 @@ from typing import List, Dict, Tuple
 from PIL import Image
 
 from openai import OpenAI
+import httpx
 
 from config import OPENROUTER_API_KEY, LLM_MODEL, IMAGE_GEN_MODEL
 from config import DEFAULT_ASPECT_RATIO, DEFAULT_IMAGE_SIZE
 from utils import image_to_uri, extract_images
+
+# 超时配置 (秒)
+API_TIMEOUT = 300  # 5 分钟 - LLM 和图片生成请求超时时间
 
 
 # 常量定义
@@ -29,7 +33,8 @@ class ImageQualityJudge:
         """
         self.client = OpenAI(
             api_key=OPENROUTER_API_KEY,
-            base_url="https://openrouter.ai/api/v1"
+            base_url="https://openrouter.ai/api/v1",
+            timeout=httpx.Timeout(API_TIMEOUT, connect=60)
         )
         self.model = model or LLM_MODEL
 
@@ -213,7 +218,8 @@ class ImageGenerator:
         """初始化生成器"""
         self.client = OpenAI(
             api_key=OPENROUTER_API_KEY,
-            base_url="https://openrouter.ai/api/v1"
+            base_url="https://openrouter.ai/api/v1",
+            timeout=httpx.Timeout(API_TIMEOUT, connect=60)
         )
 
     def analyze_style_with_llm(

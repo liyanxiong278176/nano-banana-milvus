@@ -188,21 +188,31 @@ def process_image_task(
 ):
     """后台处理图片生成任务"""
     try:
+        print("\n" + "╔" + "═" * 58 + "╗")
+        print("║" + " " * 15 + "电商 AI 生图流水线" + " " * 25 + "║")
+        print("║" + "═" * 58 + "║")
+        print(f"║  任务ID: {task_id[:8]}...                                      ║")
+        print(f"║  商品ID: {product_id}                              ║")
+        print("╚" + "═" * 58 + "╝")
+
         tasks[task_id]['status'] = 'processing'
         tasks[task_id]['progress'] = 0.1
 
         # 初始化流水线
+        print("\n[1/6] 初始化流水线组件...")
         components = ensure_database()
-        tasks[task_id]['progress'] = 0.2
+        tasks[task_id]['progress'] = 0.15
 
         # 加载新品图片
+        print("[2/6] 加载新品图片...")
         img_path = NEW_PRODUCT_DIR / f"{product_id}.jpg"
         if not img_path.exists():
             raise FileNotFoundError(f"图片不存在: {img_path}")
 
         from utils import load_image
         new_img = load_image(str(img_path))
-        tasks[task_id]['progress'] = 0.3
+        print(f"      ✓ 图片加载成功: {new_img.size[0]}x{new_img.size[1]}")
+        tasks[task_id]['progress'] = 0.25
 
         # 构建新品数据
         new_product = {
@@ -213,36 +223,49 @@ def process_image_task(
             'season': season,
             'prompt_hint': scene_hint
         }
+        print(f"      品类: {category} | 风格: {style} | 季节: {season}")
 
         # 编码新品
+        print("\n[3/6] 编码新品向量 (Dense + Sparse)...")
         query_dense, query_sparse, _ = components['embed_gen'].encode_new_product(
             new_product, components['tfidf']
         )
-        tasks[task_id]['progress'] = 0.4
+        print(f"      ✓ Dense向量: {len(query_dense)}维")
+        print(f"      ✓ Sparse向量: {len(query_sparse)}个非零项")
+        tasks[task_id]['progress'] = 0.35
 
-        # 检索相似爆款（自动去重和过滤）
+        # 检索相似爆款（循环检索 + 查询重写 + 质量评估）
+        print("\n[4/6] 检索相似爆款...")
+
         retrieved = components['retriever'].retrieve_similar_bestsellers(
             query_dense=query_dense.tolist(),
             query_sparse=query_sparse,
             category=category,
             top_k=3,           # 期望返回数量
             min_similarity=1.0, # 相似度阈值（放宽，允许更多结果）
-            max_results=6       # 最多返回6张
+            max_results=6,      # 最多返回6张
+            enable_cycle=True,  # 启用循环检索状态机
+            query_category=category,    # 用于质量评估
+            query_style=style,          # 用于质量评估
+            query_season=season,        # 用于质量评估
+            query_scene_hint=scene_hint # 用于质量评估
         )
-        tasks[task_id]['progress'] = 0.5
+        tasks[task_id]['progress'] = 0.55
 
         if not retrieved:
             raise Exception("未找到相似爆款")
 
         # 提取参考图片
         ref_images = [r["image"] for r in retrieved if r["image"]]
+        print(f"\n      ✓ 检索完成: 获得 {len(retrieved)} 个参考商品")
         tasks[task_id]['progress'] = 0.6
 
         # 根据是否启用质量评估选择不同的处理方式
         judge_model_param = judge_model if judge_model else None
 
+        print("\n[5/6] 分析风格并生成宣传图...")
         if enable_quality_check:
-            # 启用质量评估：生成单张图片并评分
+            print(f"      模式: 质量评估模式 (裁判: {judge_model or '默认'})")
             result = components['image_gen'].process_with_quality_check(
                 new_product_image=new_img,
                 reference_images=ref_images,
@@ -277,6 +300,7 @@ def process_image_task(
             raise Exception("图片生成失败")
 
         # 保存结果到 output 目录
+        print("\n[6/6] 保存结果文件...")
         output_dir = OUTPUT_DIR / product_id
         output_dir.mkdir(exist_ok=True)
 
@@ -308,6 +332,15 @@ def process_image_task(
 
         tasks[task_id]['progress'] = 1.0
         tasks[task_id]['status'] = 'completed'
+
+        # 完成日志
+        print(f"\n      ✓ 生成图片: {len(generated)} 张")
+        print(f"      ✓ 保存参考图: {len(retrieved)} 张")
+        print(f"      ✓ 输出目录: {output_dir}")
+
+        print("\n" + "╔" + "═" * 58 + "╗")
+        print("║" + " " * 20 + "任务完成!" + " " * 24 + "║")
+        print("╚" + "═" * 58 + "╝\n")
         tasks[task_id]['result'] = {
             'product_id': product_id,
             'category': category,
