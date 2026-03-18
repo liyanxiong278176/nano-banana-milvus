@@ -113,7 +113,9 @@ class HybridRetriever:
         query_category: str = "",
         query_style: str = "",
         query_season: str = "",
-        query_scene_hint: str = ""
+        query_scene_hint: str = "",
+        enable_multi_hop: bool = True,
+        max_hops: int = 3
     ) -> List[Dict[str, Any]]:
         """
         混合检索：融合 Milvus 向量检索和 Neo4j 图谱检索
@@ -134,6 +136,8 @@ class HybridRetriever:
             query_style: 查询风格（用于质量评估）
             query_season: 查询季节（用于质量评估）
             query_scene_hint: 查询场景提示（用于质量评估）
+            enable_multi_hop: 是否启用多跳推理（默认True）
+            max_hops: 最大跳数（默认3）
 
         Returns:
             融合后的检索结果列表
@@ -141,6 +145,7 @@ class HybridRetriever:
         print(f"\n{'='*60}")
         print("【混合检索】Milvus + Neo4j")
         print(f"{'='*60}")
+        print(f"  多跳推理: {'启用' if enable_multi_hop else '禁用'}")
 
         # ==================== 1. Milvus 向量检索 ====================
         print("\n[1/2] Milvus 向量检索...")
@@ -166,7 +171,7 @@ class HybridRetriever:
         if milvus_results:
             print(f"      Top 3: {', '.join([r.get('product_id', 'N/A') for r in milvus_results[:3]])}")
 
-        # ==================== 2. Neo4j 图谱检索 ====================
+        # ==================== 2. Neo4j 图谱检索（支持多跳推理）====================
         graph_results = []
         if self.neo4j_enabled and self.graph_retriever:
             print("\n[2/2] Neo4j 图谱检索...")
@@ -178,18 +183,28 @@ class HybridRetriever:
                     style=style,
                     season=season,
                     scene_hint=scene_hint or query_scene_hint,
-                    top_k=top_k * 2
+                    top_k=top_k * 2,
+                    enable_multi_hop=enable_multi_hop,
+                    max_hops=max_hops
                 )
                 print(f"  [完成] Neo4j 检索到 {len(graph_results)} 个结果")
                 if graph_results:
                     print(f"      Top 3: {', '.join([r.get('product_id', 'N/A') for r in graph_results[:3]])}")
                     # 显示各策略检索结果数量
-                    strategy_counts = {}
-                    for r in graph_results:
-                        strategy = r.get('retrieval_strategy', 'unknown')
-                        strategy_counts[strategy] = strategy_counts.get(strategy, 0) + 1
-                    if strategy_counts:
-                        print(f"      策略分布: {', '.join([f'{k}:{v}' for k, v in strategy_counts.items()])}")
+                    if enable_multi_hop:
+                        hop_counts = {}
+                        for r in graph_results:
+                            hop = r.get('hop_count', 'unknown')
+                            hop_counts[hop] = hop_counts.get(hop, 0) + 1
+                        if hop_counts:
+                            print(f"      跳数分布: {', '.join([f'{k}跳:{v}' for k, v in hop_counts.items()])}")
+                    else:
+                        strategy_counts = {}
+                        for r in graph_results:
+                            strategy = r.get('retrieval_strategy', 'unknown')
+                            strategy_counts[strategy] = strategy_counts.get(strategy, 0) + 1
+                        if strategy_counts:
+                            print(f"      策略分布: {', '.join([f'{k}:{v}' for k, v in strategy_counts.items()])}")
             except Exception as e:
                 print(f"  [失败] Neo4j 检索失败: {e}")
         else:
@@ -240,6 +255,11 @@ class HybridRetriever:
                     rank_info.append(f"G#{graph_rank}")
 
                 rank_str = " ".join(rank_info) if rank_info else "N/A"
+
+                # 显示跳数信息（如果有多跳推理）
+                hop_info = r.get("hop_count", "")
+                if hop_info:
+                    rank_str += f" | {hop_info}跳"
 
                 print(f"    {i}. {r.get('product_id', 'N/A'):8s} | {source_label:8s} | 评分:{score:.4f} | 排名:{rank_str}")
 
@@ -364,7 +384,9 @@ class HybridRetriever:
         style: str = "",
         season: str = "",
         scene_hint: str = "",
-        top_k: int = TOP_K_RETRIEVAL
+        top_k: int = TOP_K_RETRIEVAL,
+        enable_multi_hop: bool = True,
+        max_hops: int = 3
     ) -> List[Dict[str, Any]]:
         """
         仅基于属性检索（不需要向量）
@@ -377,6 +399,8 @@ class HybridRetriever:
             season: 季节
             scene_hint: 场景提示
             top_k: 返回数量
+            enable_multi_hop: 是否启用多跳推理（默认True）
+            max_hops: 最大跳数（默认3）
 
         Returns:
             检索结果列表
@@ -386,19 +410,29 @@ class HybridRetriever:
         print(f"{'='*50}")
         print(f"  查询参数: category={category or 'All'}, style={style or 'All'}, season={season or 'All'}")
         print(f"  场景提示: {scene_hint or 'None'}")
+        print(f"  多跳推理: {'启用' if enable_multi_hop else '禁用'}")
 
         if self.neo4j_enabled and self.graph_retriever:
-            # 使用 Neo4j 图谱检索
+            # 使用 Neo4j 图谱检索（支持多跳推理）
             results = self.graph_retriever.retrieve_by_graph(
                 category=category,
                 style=style,
                 season=season,
                 scene_hint=scene_hint,
-                top_k=top_k
+                top_k=top_k,
+                enable_multi_hop=enable_multi_hop,
+                max_hops=max_hops
             )
             print(f"  [完成] 检索到 {len(results)} 个结果")
             if results:
                 print(f"      Top 3: {', '.join([r.get('product_id', 'N/A') for r in results[:3]])}")
+                # 显示跳数分布
+                hop_counts = {}
+                for r in results:
+                    hop = r.get('hop_count', 'unknown')
+                    hop_counts[hop] = hop_counts.get(hop, 0) + 1
+                if enable_multi_hop and hop_counts:
+                    print(f"      跳数分布: {', '.join([f'{k}跳:{v}' for k, v in hop_counts.items()])}")
             return results
         else:
             # Neo4j 不可用，返回空
@@ -425,21 +459,25 @@ class HybridRetriever:
         query_category: str = "",
         query_style: str = "",
         query_season: str = "",
-        query_scene_hint: str = ""
+        query_scene_hint: str = "",
+        # 多跳推理参数
+        enable_multi_hop: bool = True,
+        max_hops: int = 3
     ) -> List[Dict[str, Any]]:
         """
-        两阶段检索架构：Neo4j 预过滤 + Milvus 向量精排
+        两阶段检索架构：Neo4j 多跳推理 + Milvus 向量精排
 
         业务场景：
-        1. Neo4j 第一阶段：多维度过滤（品类、风格、销量Top K）
-           例如："女装衬衫类目、近3个月销量Top100、国风通勤风格"
+        1. Neo4j 第一阶段：多跳推理扩展候选集
+           - 第1跳: 目标风格直接匹配
+           - 第2跳: 相似风格扩展
+           - 结合业务规则（品类、销量Top K）
         2. Milvus 第二阶段：在候选集中做向量相似度精排
-           例如：新品图 + prompt 向量，在候选ID列表中检索最相似的
 
         优势：
-        - 降低向量检索计算量（只在小范围候选集检索）
+        - 降低向��检索计算量（只在小范围候选集检索）
         - 结合业务规则（销量、点击率）和视觉相似度
-        - 结果更精准，转化潜力更高
+        - 多跳推理扩展候选集，增加召回多样性
 
         Args:
             query_dense: 稠密查询向量
@@ -456,26 +494,54 @@ class HybridRetriever:
             query_style: 查询风格（质量评估用）
             query_season: 查询季节（质量评估用）
             query_scene_hint: 查询场景（质量评估用）
+            enable_multi_hop: 是否启用多跳推理（默认True）
+            max_hops: 最大跳数（默认3）
 
         Returns:
             检索结果列表
         """
         print(f"\n{'='*60}")
-        print("【两阶段检索架构】Neo4j 预过滤 + Milvus 向量精排")
+        print("【两阶段检索架构】Neo4j 多跳推理 + Milvus 向量精排")
         print(f"{'='*60}")
+        print(f"  多跳推理: {'启用' if enable_multi_hop else '禁用'}")
 
-        # ==================== Stage 1: Neo4j 候选集过滤 ====================
+        # ==================== Stage 1: Neo4j 多跳推理获取候选集 ====================
         candidate_ids = []
 
         if self.neo4j_enabled and self.graph_retriever:
-            candidate_ids = self.graph_retriever.filter_candidate_products(
-                category=category,
-                style=style,
-                season=season,
-                min_sales=min_sales,
-                sales_top_k=sales_top_k,
-                limit=max_candidates
-            )
+            if enable_multi_hop and style:
+                # 使用多跳推理获取候选集
+                print(f"\n  [Stage 1.1] Neo4j 多跳推理获取候选集...")
+                multi_hop_results = self.graph_retriever.multi_hop_retrieve(
+                    category=category,
+                    style=style,
+                    season=season,
+                    scene_hint=query_scene_hint or "",
+                    top_k=max_candidates,  # 获取更多候选
+                    max_hops=max_hops
+                )
+                candidate_ids = [r["product_id"] for r in multi_hop_results]
+
+                # 显示跳数分布
+                hop_counts = {}
+                for r in multi_hop_results:
+                    hop = r.get('hop_count', 'unknown')
+                    hop_counts[hop] = hop_counts.get(hop, 0) + 1
+                if hop_counts:
+                    print(f"  [完成] 候选集跳数分布: {', '.join([f'{k}跳:{v}' for k, v in hop_counts.items()])}")
+
+            else:
+                # 使用传统过滤获取候选集
+                print(f"\n  [Stage 1.1] Neo4j 传统过滤获取候选集...")
+                candidate_ids = self.graph_retriever.filter_candidate_products(
+                    category=category,
+                    style=style,
+                    season=season,
+                    min_sales=min_sales,
+                    sales_top_k=sales_top_k,
+                    limit=max_candidates
+                )
+
         else:
             print("  [跳过] Neo4j 未启用，使用 Milvus 全量检索")
             # 使用纯 Milvus 检索（单次检索，不需要循环）

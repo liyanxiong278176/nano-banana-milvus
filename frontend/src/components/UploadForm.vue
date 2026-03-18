@@ -233,9 +233,12 @@ const handleSubmit = async () => {
     formData.append('season', form.value.season)
     formData.append('scene_hint', form.value.sceneHint)
     formData.append('enable_quality_check', form.value.enableQualityCheck ? 'true' : 'false')
-    // 两阶段检索参数
+    // 两阶段检索参数（Neo4j多跳推理 + Milvus向量精排）
     formData.append('retrieval_mode', 'two_stage')
     formData.append('sales_top_k', '100')
+    // 多跳推理参数（默认启用）
+    formData.append('enable_multi_hop', 'true')
+    formData.append('max_hops', '3')
 
     const response = await fetch('/api/upload', {
       method: 'POST',

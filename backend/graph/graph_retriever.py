@@ -121,16 +121,23 @@ class FashionGraphRetriever:
         style: str = "",
         season: str = "",
         scene_hint: str = "",
-        top_k: int = 3
+        top_k: int = 3,
+        enable_multi_hop: bool = True,
+        max_hops: int = 3
     ) -> List[Dict[str, Any]]:
         """
         基于知识图谱的多跳推理检索
 
-        检索逻辑：
-        1. 【直接匹配】品类+风格+季节完全匹配的高销量商品
-        2. 【场景推理】通过场景提示找到适合的商品
-        3. 【同风格关联】找到同风格的其他爆款商品
-        4. 【综合排序】按关联度评分排序返回
+        检���逻辑：
+        1. 【多跳推理】启用时使用风格扩展多跳推理
+           - 第1跳: 目标风格直接匹配
+           - 第2跳: 相似风格扩展
+           - 第3跳: 跨品类扩展
+        2. 【传统检索】未启用多跳时使用原逻辑
+           - 直接匹配
+           - 场景推理
+           - 同风格关联
+        3. 【综合排序】按关联度评分排序返回
 
         Args:
             category: 新品品类（如 midi_dress, maxi_dress）
@@ -138,6 +145,8 @@ class FashionGraphRetriever:
             season: 新品季节（如 summer, winter, all_season）
             scene_hint: 场景提示（如 beach, office, party）
             top_k: 返回商品数量
+            enable_multi_hop: 是否启用多跳推理（默认True）
+            max_hops: 最大跳数（默认3）
 
         Returns:
             检索结果列表，每个结果包含：
@@ -151,6 +160,7 @@ class FashionGraphRetriever:
             - description: 描述
             - score: 关联度评分
             - match_reason: 匹配原因（用于调试）
+            - hop_count: 跳数（多跳推理时）
             - image: PIL 图片对象
 
             示例：
@@ -160,7 +170,8 @@ class FashionGraphRetriever:
                     "category": "midi_dress",
                     "style": "elegant",
                     "score": 0.95,
-                    "match_reason": "direct_match",
+                    "match_reason": "hop_1_direct:elegant",
+                    "hop_count": 1,
                     "image": <PIL.Image>
                 },
                 ...
@@ -170,8 +181,20 @@ class FashionGraphRetriever:
             print("  ! Neo4j 未连接，返回空结果")
             return []
 
+        # 如果启用了多跳推理且有风格信息，使用多跳推理
+        if enable_multi_hop and style:
+            return self.multi_hop_retrieve(
+                category=category,
+                style=style,
+                season=season,
+                scene_hint=scene_hint,
+                top_k=top_k,
+                max_hops=max_hops
+            )
+
+        # 否则使用传统检索逻辑
         print(f"\n{'='*60}")
-        print("【知识图谱检索】")
+        print("【知识图谱检索】传统模式")
         print(f"{'='*60}")
         print(f"  品类: {category or '不限'}")
         print(f"  风格: {style or '不限'}")
@@ -897,6 +920,364 @@ class FashionGraphRetriever:
         print(f"{'='*60}")
 
         return candidate_ids
+
+    # ==================== 多跳推理检索 ====================
+
+    # 风格相似性映射（用于多跳推理扩展）
+    STYLE_SIMILARITY = {
+        "elegant": ["classic", "sophisticated", "formal", "refined"],
+        "casual": ["relaxed", "informal", "comfortable", "laid_back"],
+        "vintage": ["retro", "classic", "nostalgic", "traditional"],
+        "sporty": ["athletic", "active", "performance", "dynamic"],
+        "modern": ["contemporary", "sleek", "minimalist", "urban"],
+        "formal": ["business", "professional", "elegant", "dressy"],
+        "classic": ["elegant", "traditional", "timeless", "vintage"],
+        "bohemian": ["boho", "free_spirit", "eclectic", "artistic"],
+        "romantic": ["feminine", "delicate", "soft", "dreamy"],
+        "minimalist": ["simple", "clean", "modern", "sleek"],
+        "edgy": ["bold", "avant_garde", "rebellious", "fierce"],
+        "preppy": ["collegiate", "polished", "classic", "clean_cut"],
+        "chic": ["stylish", "fashionable", "elegant", "trendy"],
+        "streetwear": ["urban", "casual", "modern", "trendy"],
+        "rock": ["edgy", "bold", "rebellious", "alternative"],
+        "feminine": ["romantic", "delicate", "soft", "elegant"],
+        "masculine": ["strong", "structured", "bold", "classic"],
+    }
+
+    def multi_hop_retrieve(
+        self,
+        category: str = "",
+        style: str = "",
+        season: str = "",
+        scene_hint: str = "",
+        top_k: int = 3,
+        max_hops: int = 3
+    ) -> List[Dict[str, Any]]:
+        """
+        多跳推理检索 - 通过风格扩展获取更多候选商品
+
+        推理路径示例：
+        - 第1跳: 查找目标风格节点 (如 "elegant")
+        - 第2跳: 查找相似风格节点 (如 "classic", "sophisticated")
+        - 第3跳: 查找这些风格下的商品
+
+        Args:
+            category: 品类过滤
+            style: 目标风格（起点）
+            season: 季节过滤
+            scene_hint: 场景提示
+            top_k: 返回数量
+            max_hops: 最大跳数（默认3）
+
+        Returns:
+            检索结果列表，包含 hop_count 字段显示跳数
+        """
+        if not self.is_connected():
+            print("  ! Neo4j 未连接，返回空结果")
+            return []
+
+        print(f"\n{'='*60}")
+        print("【多跳推理检索】风格扩展模式")
+        print(f"{'='*60}")
+        print(f"  起始风格: {style or '未指定'}")
+        print(f"  品类过滤: {category or '不限'}")
+        print(f"  季节过滤: {season or '不限'}")
+        print(f"  最大跳数: {max_hops}")
+
+        all_results = []
+        hop_summary = {}  # 记录每跳的结果
+
+        # ==================== 第1跳：直接匹配目标风格 ====================
+        if style:
+            print(f"\n  >> 第1跳: 查找风格节点 '{style}'")
+            hop_1_results = self._hop_1_target_style(category, style, season, top_k)
+            hop_summary[1] = len(hop_1_results)
+            all_results.extend(hop_1_results)
+
+            # ==================== 第2跳：扩展到相似风格 ====================
+            if max_hops >= 2 and style in self.STYLE_SIMILARITY:
+                similar_styles = self.STYLE_SIMILARITY[style]
+                print(f"\n  >> 第2跳: 查找相似风格节点 {similar_styles}")
+
+                hop_2_results = self._hop_2_similar_styles(
+                    category, similar_styles, season, top_k, all_results
+                )
+                hop_summary[2] = len(hop_2_results)
+                all_results.extend(hop_2_results)
+
+                # ==================== 第3跳：跨品类扩展（可选）====================
+                if max_hops >= 3 and hop_2_results:
+                    print(f"\n  >> 第3跳: 跨品类扩展（同风格不同品类）")
+
+                    hop_3_results = self._hop_3_cross_category(
+                        style, similar_styles, season, top_k, all_results
+                    )
+                    hop_summary[3] = len(hop_3_results)
+                    all_results.extend(hop_3_results)
+
+        # ==================== 场景扩展（额外跳数）====================
+        if scene_hint and max_hops >= 2:
+            print(f"\n  >> 场景扩展跳: 查找场景 '{scene_hint}' 相关商品")
+            scene_results = self._scene_inference(
+                category, style, season, scene_hint, top_k
+            )
+            # 场景扩展不计入基础跳数，但标记为场景跳
+            for result in scene_results:
+                result["hop_type"] = "scene"
+                result["hop_count"] = f"scene:{scene_hint}"
+            existing_ids = {r["product_id"] for r in all_results}
+            for result in scene_results:
+                if result["product_id"] not in existing_ids:
+                    all_results.append(result)
+
+        # ==================== 加载图片并排序 ====================
+        results_with_images = []
+        for result in all_results:
+            try:
+                img_path = IMAGE_DIR / f"{result['product_id']}.jpg"
+                if img_path.exists():
+                    result["image"] = load_image(str(img_path))
+                    results_with_images.append(result)
+            except Exception as e:
+                print(f"  ! 图片加载失败 ({result['product_id']}): {e}")
+
+        # 按评分排序
+        results_with_images.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+        # 取 top_k
+        final_results = results_with_images[:top_k]
+
+        # ==================== 输出多跳推理摘要 ====================
+        print(f"\n{'='*60}")
+        print("【多跳推理摘要】")
+        print(f"{'='*60}")
+        for hop_num, count in hop_summary.items():
+            print(f"  第{hop_num}跳: 找到 {count} 个商品")
+
+        print(f"\n  总计: {len(all_results)} 个候选商品")
+        print(f"  去重后: {len(final_results)} 个最终结果")
+
+        print(f"\n  最终结果:")
+        for i, r in enumerate(final_results, 1):
+            hop_info = r.get("hop_count", "direct")
+            print(f"    {i}. {r['product_id']} | {r.get('style', 'N/A')} | "
+                  f"跳数: {hop_info} | 评分: {r.get('score', 0):.2f}")
+
+        return final_results
+
+    def _hop_1_target_style(
+        self,
+        category: str,
+        style: str,
+        season: str,
+        top_k: int
+    ) -> List[Dict[str, Any]]:
+        """
+        第1跳：查找目标风格下的商品
+
+        路径：Style节点 → Product节点
+        """
+        results = []
+
+        params = {
+            "style": style,
+            "min_sales": MIN_SALES_COUNT
+        }
+
+        match_clauses = ["MATCH (s:Style {name: $style})", "MATCH (p:Product)-[:HAS_STYLE]->(s)"]
+        where_conditions = ["p.sales_count >= $min_sales"]
+
+        if category:
+            match_clauses.append("MATCH (p)-[:HAS_CATEGORY]->(c:Category {name: $category})")
+            params["category"] = category
+
+        if season and season != "all_season":
+            where_conditions.append("(p.season = $season OR p.season = 'all_season')")
+            params["season"] = season
+
+        cypher = " ".join(match_clauses) + " WHERE " + " AND ".join(where_conditions)
+        cypher += f"""
+        RETURN p.product_id AS product_id,
+               p.category AS category,
+               p.style AS style,
+               p.season AS season,
+               p.color AS color,
+               p.sales_count AS sales_count,
+               p.price AS price
+        ORDER BY p.sales_count DESC
+        LIMIT {top_k * 2}
+        """
+
+        try:
+            with self.driver.session(database=self.database) as session:
+                records = session.run(cypher, params)
+                for record in records:
+                    results.append({
+                        "product_id": record["product_id"],
+                        "category": record["category"],
+                        "style": record["style"],
+                        "season": record["season"],
+                        "color": record["color"],
+                        "sales_count": record["sales_count"],
+                        "price": record["price"],
+                        "score": 0.9,  # 第1跳直接匹配，高分
+                        "match_reason": f"hop_1_direct:{style}",
+                        "hop_count": 1,
+                        "hop_type": "direct_match"
+                    })
+        except Exception as e:
+            print(f"    ! 第1跳查询失败: {e}")
+
+        print(f"    [OK] 第1跳完成: 找到 {len(results)} 个商品")
+        return results
+
+    def _hop_2_similar_styles(
+        self,
+        category: str,
+        similar_styles: List[str],
+        season: str,
+        top_k: int,
+        existing_results: List[Dict]
+    ) -> List[Dict[str, Any]]:
+        """
+        第2跳：查找相似风格下的商品
+
+        路径：目标Style → 相似Style节点 → Product节点
+        """
+        results = []
+        existing_ids = {r["product_id"] for r in existing_results}
+
+        # 构建相似风格的 Cypher 查询
+        params = {
+            "similar_styles": similar_styles,
+            "min_sales": MIN_SALES_COUNT
+        }
+
+        match_clauses = ["MATCH (s:Style)", "WHERE s.name IN $similar_styles", "MATCH (p:Product)-[:HAS_STYLE]->(s)"]
+        where_conditions = ["p.sales_count >= $min_sales"]
+
+        if category:
+            match_clauses.append("MATCH (p)-[:HAS_CATEGORY]->(c:Category {name: $category})")
+            params["category"] = category
+
+        if season and season != "all_season":
+            where_conditions.append("(p.season = $season OR p.season = 'all_season')")
+            params["season"] = season
+
+        cypher = " ".join(match_clauses) + " WHERE " + " AND ".join(where_conditions)
+        cypher += f"""
+        RETURN p.product_id AS product_id,
+               p.category AS category,
+               p.style AS style,
+               p.season AS season,
+               p.color AS color,
+               p.sales_count AS sales_count,
+               p.price AS price
+        ORDER BY p.sales_count DESC
+        LIMIT {top_k * 3}
+        """
+
+        try:
+            with self.driver.session(database=self.database) as session:
+                records = session.run(cypher, params)
+                for record in records:
+                    product_id = record["product_id"]
+                    if product_id not in existing_ids:
+                        results.append({
+                            "product_id": product_id,
+                            "category": record["category"],
+                            "style": record["style"],
+                            "season": record["season"],
+                            "color": record["color"],
+                            "sales_count": record["sales_count"],
+                            "price": record["price"],
+                            "score": 0.7,  # 第2跳相似风格，中等分数
+                            "match_reason": f"hop_2_similar_style:{record['style']}",
+                            "hop_count": 2,
+                            "hop_type": "similar_style"
+                        })
+        except Exception as e:
+            print(f"    ! 第2跳查询失败: {e}")
+
+        print(f"    [OK] 第2跳完成: 找到 {len(results)} 个新商品")
+        return results
+
+    def _hop_3_cross_category(
+        self,
+        style: str,
+        similar_styles: List[str],
+        season: str,
+        top_k: int,
+        existing_results: List[Dict]
+    ) -> List[Dict[str, Any]]:
+        """
+        第3跳：跨品类扩展 - 同风格不同品类
+
+        路径：Style节点 → 不同品类的Product节点
+        用于当同风格同品类商品不足时，扩展到其他品类
+        """
+        results = []
+        existing_ids = {r["product_id"] for r in existing_results}
+
+        # 获取已存在的品类列表（避免重复）
+        existing_categories = {r.get("category") for r in existing_results if r.get("category")}
+
+        all_styles = [style] + similar_styles
+        params = {
+            "all_styles": all_styles,
+            "min_sales": MIN_SALES_COUNT,
+            "existing_categories": list(existing_categories)
+        }
+
+        # 查找这些风格下，其他品类的商品
+        cypher = """
+        MATCH (s:Style)
+        WHERE s.name IN $all_styles
+        MATCH (p:Product)-[:HAS_STYLE]->(s)
+        WHERE p.sales_count >= $min_sales
+        AND NOT p.category IN $existing_categories
+        """
+
+        if season and season != "all_season":
+            cypher += " AND (p.season = $season OR p.season = 'all_season')"
+            params["season"] = season
+
+        cypher += f"""
+        RETURN p.product_id AS product_id,
+               p.category AS category,
+               p.style AS style,
+               p.season AS season,
+               p.color AS color,
+               p.sales_count AS sales_count,
+               p.price AS price
+        ORDER BY p.sales_count DESC
+        LIMIT {top_k * 2}
+        """
+
+        try:
+            with self.driver.session(database=self.database) as session:
+                records = session.run(cypher, params)
+                for record in records:
+                    product_id = record["product_id"]
+                    if product_id not in existing_ids:
+                        results.append({
+                            "product_id": product_id,
+                            "category": record["category"],
+                            "style": record["style"],
+                            "season": record["season"],
+                            "color": record["color"],
+                            "sales_count": record["sales_count"],
+                            "price": record["price"],
+                            "score": 0.5,  # 第3跳跨品类，较低分数
+                            "match_reason": f"hop_3_cross_category:{record['category']}",
+                            "hop_count": 3,
+                            "hop_type": "cross_category"
+                        })
+        except Exception as e:
+            print(f"    ! 第3跳查询失败: {e}")
+
+        print(f"    [OK] 第3跳完成: 找到 {len(results)} 个新商品")
+        return results
 
     def get_graph_stats(self) -> Dict[str, int]:
         """

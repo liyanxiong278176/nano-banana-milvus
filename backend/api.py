@@ -46,8 +46,11 @@ class GenerationRequest(BaseModel):
     enable_quality_check: bool = Field(default=False, description="是否启用质量评估")
     judge_model: str = Field(default="", description="裁判模型（空则使用默认模型）")
     # 检索模式配置
-    retrieval_mode: str = Field(default="two_stage", description="检索模式: hybrid(混合) / two_stage(两阶段)")
+    retrieval_mode: str = Field(default="two_stage", description="检索模式: two_stage(两阶段检索+Neo4j多跳推理)")
     sales_top_k: int = Field(default=100, description="两阶段检索-销量TopK候选数")
+    # 多跳推理配置
+    enable_multi_hop: bool = Field(default=True, description="是否启用多跳推理")
+    max_hops: int = Field(default=3, description="最大跳数")
 
 
 class GenerationResponse(BaseModel):
@@ -200,7 +203,9 @@ def process_image_task(
     enable_quality_check: bool = False,
     judge_model: str = "",
     retrieval_mode: str = "hybrid",
-    sales_top_k: int = 100
+    sales_top_k: int = 100,
+    enable_multi_hop: bool = True,
+    max_hops: int = 3
 ):
     """后台处理图片生成任务"""
     try:
@@ -255,7 +260,7 @@ def process_image_task(
         print(f"      检索模式: {retrieval_mode}")
 
         if retrieval_mode == "two_stage":
-            # 两阶段检索: Neo4j预过滤 + Milvus向量精排
+            # 两阶段检索: Neo4j多跳推理 + Milvus向量精排
             retrieved = components['retriever'].two_stage_retrieve(
                 query_dense=query_dense.tolist(),
                 query_sparse=query_sparse,
@@ -269,7 +274,9 @@ def process_image_task(
                 query_category=category,
                 query_style=style,
                 query_season=season,
-                query_scene_hint=scene_hint
+                query_scene_hint=scene_hint,
+                enable_multi_hop=enable_multi_hop,  # 启用多跳推理
+                max_hops=max_hops                       # 最大跳数
             )
         else:
             # 默认混合检索: Milvus + Neo4j 并行 + RRF融合
@@ -284,7 +291,9 @@ def process_image_task(
                 query_category=category,    # 用于质量评估
                 query_style=style,          # 用于质量评估
                 query_season=season,        # 用于质量评估
-                query_scene_hint=scene_hint # 用于质量评估
+                query_scene_hint=scene_hint, # 用于质量评估
+                enable_multi_hop=enable_multi_hop,  # 多跳推理
+                max_hops=max_hops                  # 最大跳数
             )
 
         tasks[task_id]['progress'] = 0.55
@@ -444,8 +453,10 @@ async def upload_and_generate(
     scene_hint: str = Form(default=""),
     enable_quality_check: bool = Form(default=False),
     judge_model: str = Form(default=""),
-    retrieval_mode: str = Form(default="hybrid"),
-    sales_top_k: int = Form(default=100)
+    retrieval_mode: str = Form(default="two_stage"),  # 两阶段检索（Neo4j多跳 + Milvus精排）
+    sales_top_k: int = Form(default=100),
+    enable_multi_hop: bool = Form(default=True),
+    max_hops: int = Form(default=3)
 ):
     """
     上传图片并生成宣传图
@@ -498,7 +509,9 @@ async def upload_and_generate(
             enable_quality_check,
             judge_model,
             retrieval_mode,
-            sales_top_k
+            sales_top_k,
+            enable_multi_hop,
+            max_hops
         )
 
         quality_msg = "（启用质量评估）" if enable_quality_check else ""

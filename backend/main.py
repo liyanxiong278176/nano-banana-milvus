@@ -99,7 +99,9 @@ class FashionImagePipeline:
     def process_new_product(
         self,
         new_product_id: str,
-        save_output: bool = True
+        save_output: bool = True,
+        enable_multi_hop: bool = True,
+        max_hops: int = 3
     ) -> Dict:
         """
         处理单个新品: 检索 → 分析 → 生成
@@ -107,6 +109,8 @@ class FashionImagePipeline:
         Args:
             new_product_id: 新品 ID (如 "NEW001")
             save_output: 是否保存输出图片
+            enable_multi_hop: 是否启用多跳推理（默认True）
+            max_hops: 最大跳数（默认3）
 
         Returns:
             处理结果字典
@@ -143,7 +147,7 @@ class FashionImagePipeline:
             print(f"  ✓ Dense向量: {len(query_dense)}维")
             print(f"  ✓ Sparse向量: {len(query_sparse)}个非零项")
 
-            # 检索相似爆款（循环检索 + 查询重写 + 质量评估）
+            # 检索相似爆款（循环检索 + 查询重写 + 质量评估 + 多跳推理）
             print("\n[3/5] 检索相似爆款...")
             retrieved = self.retriever.retrieve_similar_bestsellers(
                 query_dense=query_dense.tolist(),
@@ -154,7 +158,9 @@ class FashionImagePipeline:
                 query_category=new_product.get("category", ""),  # 用于质量评估
                 query_style=new_product.get("style", ""),        # 用于质量评估
                 query_season=new_product.get("season", ""),      # 用于质量评估
-                query_scene_hint=new_product.get("prompt_hint", "")  # 用于质量评估
+                query_scene_hint=new_product.get("prompt_hint", ""),  # 用于质量评估
+                enable_multi_hop=enable_multi_hop,      # 启用多跳推理
+                max_hops=max_hops                       # 最大跳数
             )
 
             if not retrieved:
@@ -279,7 +285,9 @@ class FashionImagePipeline:
     def run(
         self,
         new_product_ids: List[str] = None,
-        save_report: bool = True
+        save_report: bool = True,
+        enable_multi_hop: bool = True,
+        max_hops: int = 3
     ) -> List[Dict]:
         """
         运行流水线
@@ -287,6 +295,8 @@ class FashionImagePipeline:
         Args:
             new_product_ids: 新品 ID 列表，None 则处理全部
             save_report: 是否保存汇总报告
+            enable_multi_hop: 是否启用多跳推理（默认True）
+            max_hops: 最大跳数（默认3）
 
         Returns:
             处理结果列表
@@ -311,7 +321,12 @@ class FashionImagePipeline:
 
         for i, pid in enumerate(new_product_ids, 1):
             print(f"\n[{i}/{total}] {pid}")
-            result = self.process_new_product(pid, save_output=True)
+            result = self.process_new_product(
+                pid,
+                save_output=True,
+                enable_multi_hop=enable_multi_hop,
+                max_hops=max_hops
+            )
             if result:
                 results.append(result)
 
@@ -339,12 +354,16 @@ def main():
   python main.py --process NEW001   # 处理单个新品
   python main.py --ids NEW001 NEW002 # 处理指定新品
   python main.py --reinit           # 强制重新初始化数据库
+  python main.py --process NEW001 --no-multi-hop  # 禁用多跳推理
         """
     )
 
     parser.add_argument("--process", type=str, help="处理指定新品 ID")
     parser.add_argument("--ids", nargs="+", help="处理指定新品 ID 列表")
     parser.add_argument("--reinit", action="store_true", help="强制重新初始化数据库")
+    parser.add_argument("--enable-multi-hop", action="store_true", default=True, help="启用多跳推理（默认启用）")
+    parser.add_argument("--no-multi-hop", action="store_false", dest="enable_multi_hop", help="禁用多跳推理")
+    parser.add_argument("--max-hops", type=int, default=3, help="最大跳数（默认3）")
 
     args = parser.parse_args()
 
@@ -357,7 +376,11 @@ def main():
     # 处理单个新品
     if args.process:
         pipeline._ensure_database_ready()
-        pipeline.process_new_product(args.process)
+        pipeline.process_new_product(
+            args.process,
+            enable_multi_hop=args.enable_multi_hop,
+            max_hops=args.max_hops
+        )
 
     # 处理指定列表
     elif args.ids:
