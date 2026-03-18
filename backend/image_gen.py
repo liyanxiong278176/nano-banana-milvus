@@ -9,9 +9,11 @@ from PIL import Image
 from openai import OpenAI
 import httpx
 
-from config import OPENROUTER_API_KEY, LLM_MODEL, IMAGE_GEN_MODEL
-from config import DEFAULT_ASPECT_RATIO, DEFAULT_IMAGE_SIZE
-from utils import image_to_uri, extract_images
+from config import (
+    OPENROUTER_API_KEY, LLM_MODEL, IMAGE_GEN_MODEL,
+    DEFAULT_ASPECT_RATIO, DEFAULT_IMAGE_SIZE, ENABLE_CACHE
+)
+from utils import image_to_uri, extract_images, get_cache_key, save_to_cache, load_from_cache
 
 # 超时配置 (秒)
 API_TIMEOUT = 300  # 5 分钟 - LLM 和图片生成请求超时时间
@@ -227,9 +229,11 @@ class ImageGenerator:
         reference_images: List[Image.Image]
     ) -> str:
         """
-        使用 Qwen3.5 分析爆款图片风格（综合分析）
+        使用 LLM 分析爆款图片风格（综合分析）
 
         【第一性原则】只提取拍摄风格（场景、光线、构图），绝不描述服装款式
+
+        【缓存机制】根据参考图片内容生成缓存键，相同图片组合直接返回缓存结果
 
         Args:
             reference_images: 参考爆款图片列表
@@ -237,12 +241,24 @@ class ImageGenerator:
         Returns:
             风格描述 prompt（仅包含拍摄风格，不包含服装款式）
         """
-        print(f"\n使用 Qwen3.5 分析爆款拍摄风格...")
+        print(f"\n使用 {LLM_MODEL} 分析爆款拍摄风格...")
         print(f"  传入参考图数量: {len(reference_images)}")
 
         if not reference_images:
             print("  警告: 没有参考图！")
             return "专业电商宣传照，简洁背景，柔和光线"
+
+        # ==================== 【新增】缓存逻辑 ====================
+        if ENABLE_CACHE:
+            # 生成缓存键：基于所有参考图的 base64 拼接
+            cache_content = "".join([image_to_uri(img) for img in reference_images])
+            cache_key = get_cache_key("style_analysis", cache_content)
+
+            # 尝试从缓存加载
+            cached_result = load_from_cache(cache_key)
+            if cached_result is not None:
+                print("  ✓ 使用缓存的风格分析结果")
+                return cached_result
 
         # 对每张图单独分析风格
         individual_analyses = []
@@ -317,11 +333,18 @@ class ImageGenerator:
         style_prompt = response.choices[0].message.content.strip()
         print(f"\n综合拍摄风格分析结果:\n{style_prompt}\n")
 
-        # 返回综合风格和每张图的分析
-        return {
+        # 构建返回结果
+        result = {
             "combined_style": style_prompt,
             "individual_analyses": individual_analyses
         }
+
+        # ==================== 【新增】保存到缓存 ====================
+        if ENABLE_CACHE:
+            save_to_cache(cache_key, result)
+
+        # 返回综合风格和每张图的分析
+        return result
 
     def _get_model_modalities(self, model: str) -> List[str]:
         """

@@ -15,7 +15,7 @@ def test_config():
 
     try:
         from config import (
-            OPENROUTER_API_KEY, EMBED_MODEL, LM_MODEL,
+            OPENROUTER_API_KEY, EMBED_MODEL, LLM_MODEL,
             IMAGE_GEN_MODEL, MILVUS_URI, COLLECTION_NAME
         )
         print(f"✓ 配置加载成功")

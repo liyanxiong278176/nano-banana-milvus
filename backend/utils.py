@@ -4,13 +4,18 @@
 import io
 import base64
 import time
+import json
+import hashlib
 import requests as req
 import numpy as np
 from PIL import Image
-from typing import List, Union, Dict, Any
+from typing import List, Union, Dict, Any, Optional
 from tqdm import tqdm
 
-from config import OPENROUTER_API_KEY, EMBED_MODEL, MAX_IMAGE_SIZE, RATE_LIMIT_DELAY
+from config import (
+    OPENROUTER_API_KEY, EMBED_MODEL, MAX_IMAGE_SIZE, RATE_LIMIT_DELAY,
+    CACHE_DIR, ENABLE_CACHE
+)
 
 
 def image_to_uri(img: Image.Image, max_size: int = MAX_IMAGE_SIZE) -> str:
@@ -213,6 +218,111 @@ def display_comparison(original: Image.Image, reference: Image.Image, generated:
     return result
 
 
+# ==================== 缓存工具函数（新增） ====================
+
+def get_cache_key(prefix: str, content: Union[str, bytes]) -> str:
+    """
+    生成缓存键
+
+    使用 MD5 哈希 content 生成唯一键，避免文件名过长
+
+    Args:
+        prefix: 缓存前缀（如 "style_analysis", "embedding"）
+        content: 用于生成键的内容（图片的 base64 或文本）
+
+    Returns:
+        唯一的缓存文件名（格式: prefix_md5hash.json）
+
+    Examples:
+        >>> get_cache_key("style", "some text content")
+        'style_a94a8fe5ccb19ba61c4c0873d391e987982fbbd3.json'
+    """
+    if isinstance(content, str):
+        content_bytes = content.encode('utf-8')
+    else:
+        content_bytes = content
+
+    hash_obj = hashlib.md5(content_bytes)
+    hash_str = hash_obj.hexdigest()
+    return f"{prefix}_{hash_str}.json"
+
+
+def save_to_cache(cache_key: str, data: Union[Dict, str, list]) -> bool:
+    """
+    保存数据到缓存
+
+    Args:
+        cache_key: 缓存键（由 get_cache_key 生成）
+        data: 要缓存的数据（字典、字符串或列表）
+
+    Returns:
+        是否成功保存（异常时返回 False，不影响主流程）
+    """
+    if not ENABLE_CACHE:
+        return False
+
+    try:
+        cache_path = CACHE_DIR / cache_key
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        # 缓存写入失败时，静默处理，不影响主流程
+        print(f"  警告: 缓存写入失败 ({cache_key}): {e}")
+        return False
+
+
+def load_from_cache(cache_key: str) -> Optional[Dict]:
+    """
+    从缓存加载数据
+
+    Args:
+        cache_key: 缓存键（由 get_cache_key 生成）
+
+    Returns:
+        缓存的数据（未找到或读取失败返回 None）
+    """
+    if not ENABLE_CACHE:
+        return None
+
+    try:
+        cache_path = CACHE_DIR / cache_key
+        if not cache_path.exists():
+            return None
+
+        with open(cache_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        # 缓存读取失败时，静默处理，继续正常流程
+        print(f"  警告: 缓存读取失败 ({cache_key}): {e}")
+        return None
+
+
+def clear_cache(prefix: str = None) -> int:
+    """
+    清理缓存文件
+
+    Args:
+        prefix: 可选，只清理指定前缀的缓存；为 None 则清理全部
+
+    Returns:
+        清理的文件数量
+
+    Note:
+        建议定期运行此函数清理缓存，避免缓存文件过多占用磁盘空间
+    """
+    count = 0
+    try:
+        for cache_file in CACHE_DIR.glob("*.json"):
+            if prefix is None or cache_file.name.startswith(f"{prefix}_"):
+                cache_file.unlink()
+                count += 1
+        print(f"已清理 {count} 个缓存文件")
+    except Exception as e:
+        print(f"清理缓存失败: {e}")
+    return count
+
+
 if __name__ == "__main__":
     print("工具函数模块测试")
     print(f"image_to_uri 函数: 将 PIL 图片转为 base64 URI")
@@ -220,3 +330,8 @@ if __name__ == "__main__":
     print(f"get_text_embedding 函数: 编码文本为向量")
     print(f"sparse_to_dict 函数: 转换稀疏向量格式")
     print(f"extract_images 函数: 从 API 响应提取图片")
+    # 新增缓存函数说明
+    print(f"get_cache_key 函数: 生成缓存键")
+    print(f"save_to_cache 函数: 保存数据到缓存")
+    print(f"load_from_cache 函数: 从缓存加载数据")
+    print(f"clear_cache 函数: 清理缓存文件")

@@ -30,9 +30,9 @@ OPENROUTER_API_KEY = os.environ.get(
 # 所有模型通过 OpenRouter API 调用，无需本地 GPU
 EMBED_MODEL = "nvidia/llama-nemotron-embed-vl-1b-v2"  # 免费，支持图像+文本 → 2048维
 EMBED_DIM = 2048
-LLM_MODEL = "qwen/qwen3-vl-235b-a22b-thinking"  # 风格分析（免费，支持视觉+视频）
+LLM_MODEL = "qwen/qwen3-vl-8b-instruct"  # 风格分析（免费，支持视觉+视频）
 IMAGE_GEN_MODEL = "black-forest-labs/flux.2-klein-4b"  # FLUX.2 Klein (价格更低: 首$0.014/MP, 后续$0.001/MP)
-LIGHT_LLM_MODEL = "qwen/qwen3-vl-235b-a22b-thinking"  # 免费模型，用于检索质量评估
+LIGHT_LLM_MODEL = "qwen/qwen3-vl-8b-instruct"  # 免费模型，用于检索质量评估
 
 # ==================== Milvus 配置 ====================
 MILVUS_URI = "http://localhost:19530"
@@ -51,4 +51,36 @@ RATE_LIMIT_DELAY = 0.5        # API 调用间隔(秒)
 # ==================== 筛选条件 ====================
 MIN_SALES_COUNT = 1500        # 只检索销量超过此值的爆款
 
+# ==================== 模型分级配置 ====================
+# 【新增】根据不同场景选择不同模型，平衡成本和质量
+MODEL_TIERS = {
+    # 高质量模式：用于最终图片生成的风格分析
+    "high_quality": {
+        "style_analysis": LLM_MODEL,      # 使用主模型进行风格分析
+        "quality_judge": LLM_MODEL,       # 使用主模型进行质量评估
+    },
+    # 标准模式：默认配置
+    "standard": {
+        "style_analysis": LLM_MODEL,
+        "quality_judge": LIGHT_LLM_MODEL,
+    },
+    # 经济模式：降低成本
+    "economy": {
+        "style_analysis": LIGHT_LLM_MODEL,
+        "quality_judge": LIGHT_LLM_MODEL,
+    }
+}
+
+# 当前使用的模型层级（可通过环境变量 OVERRUN_MODEL_TIER 覆盖）
+CURRENT_MODEL_TIER = os.environ.get("OVERRUN_MODEL_TIER", "standard")
+
+# ==================== 缓存配置 ====================
+# 【新增】简单本地缓存，减少重复的 LLM 调用
+CACHE_DIR = PROJECT_ROOT / "cache"
+CACHE_DIR.mkdir(exist_ok=True)
+ENABLE_CACHE = os.environ.get("ENABLE_CACHE", "true").lower() == "true"  # 默认启用
+CACHE_MAX_SIZE_MB = 500  # 缓存目录最大大小（MB），超过后建议手动清理
+# 注意：缓存文件会持续累积，建议定期清理 CACHE_DIR 中的旧文件
+
 print(f"配置加载完成 | 项目路径: {PROJECT_ROOT}")
+print(f"模型层级: {CURRENT_MODEL_TIER} | 缓存: {'启用' if ENABLE_CACHE else '禁用'}")
