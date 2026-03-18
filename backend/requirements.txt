@@ -1,5 +1,6 @@
-# 后端依赖
+# Nano Banana + Milvus 电商生图流水线
 pymilvus>=2.4.0
+neo4j>=5.0.0
 openai>=1.0.0
 pillow>=10.0.0
 scikit-learn>=1.3.0
@@ -8,8 +9,3 @@ numpy>=1.24.0
 pandas>=2.0.0
 requests>=2.31.0
 python-dotenv>=1.0.0
-
-# FastAPI 相关
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-python-multipart>=0.0.6

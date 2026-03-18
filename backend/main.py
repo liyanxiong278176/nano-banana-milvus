@@ -11,6 +11,7 @@ from PIL import Image
 from config import OUTPUT_DIR, TOP_K_RETRIEVAL, COLLECTION_NAME
 from embedding import EmbeddingGenerator
 from retrieval import BestsellerRetriever
+from graph import HybridRetriever, create_hybrid_retriever
 from image_gen import ImageGenerator
 from utils import save_image
 
@@ -21,10 +22,14 @@ class FashionImagePipeline:
     def __init__(self):
         """初始化流水线"""
         print("=" * 60)
-        print("Nano Banana + Milvus 电商生图流水线")
+        print("Nano Banana + Milvus + Neo4j 电商生图流水线")
         print("=" * 60)
 
-        self.retriever = BestsellerRetriever()
+        # 使用混合检索器（Milvus + Neo4j）
+        self.retriever = create_hybrid_retriever(
+            milvus_weight=0.6,
+            graph_weight=0.4
+        )
         self.embed_gen = EmbeddingGenerator()
         self.image_gen = ImageGenerator()
         self.tfidf = None
@@ -32,9 +37,11 @@ class FashionImagePipeline:
     def _check_database_ready(self) -> bool:
         """检查数据库是否已初始化"""
         try:
-            if not self.retriever.has_collection():
+            # 混合检索器内部有 BestsellerRetriever
+            milvus_retriever = self.retriever.milvus_retriever
+            if not milvus_retriever.has_collection():
                 return False
-            stats = self.retriever.get_collection_stats()
+            stats = milvus_retriever.get_collection_stats()
             return stats.get('row_count', 0) > 0
         except Exception:
             return False
@@ -42,8 +49,9 @@ class FashionImagePipeline:
     def _ensure_database_ready(self):
         """确保数据库已初始化（只初始化一次）"""
         if self._check_database_ready():
-            stats = self.retriever.get_collection_stats()
-            print(f"\n✓ 数据库已就绪，包含 {stats['row_count']} 条记录")
+            milvus_retriever = self.retriever.milvus_retriever
+            stats = milvus_retriever.get_collection_stats()
+            print(f"\n[OK] 数据库已就绪，包含 {stats['row_count']} 条记录")
             # 加载 TF-IDF 向量化器
             products, _ = self.embed_gen.load_products()
             self.tfidf = self.embed_gen.build_tfidf_vectorizer(products)
@@ -71,21 +79,22 @@ class FashionImagePipeline:
         image_files = list(image_dir.glob("*.jpg")) + list(image_dir.glob("*.png"))
         print(f"找到 {len(image_files)} 张商品图片")
 
-        # 创建 Collection
-        self.retriever.create_collection(overwrite=overwrite)
+        # 创建 Collection（通过 Milvus 检索器）
+        milvus_retriever = self.retriever.milvus_retriever
+        milvus_retriever.create_collection(overwrite=overwrite)
 
         # 生成嵌入向量
         products, dense_vectors, sparse_vectors, tfidf = \
             self.embed_gen.process_all_embeddings()
 
         # 插入数据库
-        self.retriever.insert_products(products, dense_vectors, sparse_vectors)
+        milvus_retriever.insert_products(products, dense_vectors, sparse_vectors)
 
         # 保存 TF-IDF
         self.tfidf = tfidf
 
-        stats = self.retriever.get_collection_stats()
-        print(f"\n✓ 数据库初始化完成! 共 {stats['row_count']} 条记录")
+        stats = milvus_retriever.get_collection_stats()
+        print(f"\n[OK] 数据库初始化完成! 共 {stats['row_count']} 条记录")
 
     def process_new_product(
         self,

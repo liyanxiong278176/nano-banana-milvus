@@ -233,6 +233,9 @@ const handleSubmit = async () => {
     formData.append('season', form.value.season)
     formData.append('scene_hint', form.value.sceneHint)
     formData.append('enable_quality_check', form.value.enableQualityCheck ? 'true' : 'false')
+    // 两阶段检索参数
+    formData.append('retrieval_mode', 'two_stage')
+    formData.append('sales_top_k', '100')
 
     const response = await fetch('/api/upload', {
       method: 'POST',

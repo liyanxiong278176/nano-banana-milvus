@@ -39,6 +39,16 @@ MILVUS_URI = "http://localhost:19530"
 COLLECTION_NAME = "fashion_products"
 TOP_K_RETRIEVAL = 3  # 检索返回的相似爆款数量
 
+# ==================== Neo4j 知识图谱配置 ====================
+# 【新增】Neo4j 图数据库配置，用于结构化推理和知识图谱检索
+NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "password")
+NEO4J_DB = os.environ.get("NEO4J_DB", "neo4j")  # 使用默认数据库（主流用法）
+NEO4J_MAX_CONNECTION_POOL_SIZE = 50  # 连接池最大大小
+NEO4J_CONNECTION_ACQUISITION_TIMEOUT = 60  # 连接获取超时（秒）
+NEO4J_CONNECTION_TIMEOUT = 30  # 连接超时（秒）
+
 # ==================== 图像生成配置 ====================
 DEFAULT_ASPECT_RATIO = "3:4"  # 适合人像的宽高比
 DEFAULT_IMAGE_SIZE = "2K"     # 分辨率: 512px, 1K, 2K, 4K

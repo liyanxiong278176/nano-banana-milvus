@@ -30,6 +30,7 @@ from config import (
 )
 from embedding import EmbeddingGenerator
 from retrieval import BestsellerRetriever
+from graph import HybridRetriever, create_hybrid_retriever
 from image_gen import ImageGenerator
 from utils import save_image
 
@@ -44,6 +45,9 @@ class GenerationRequest(BaseModel):
     scene_hint: str = Field(default="", description="场景提示")
     enable_quality_check: bool = Field(default=False, description="是否启用质量评估")
     judge_model: str = Field(default="", description="裁判模型（空则使用默认模型）")
+    # 检索模式配置
+    retrieval_mode: str = Field(default="two_stage", description="检索模式: hybrid(混合) / two_stage(两阶段)")
+    sales_top_k: int = Field(default=100, description="两阶段检索-销量TopK候选数")
 
 
 class GenerationResponse(BaseModel):
@@ -105,14 +109,21 @@ def init_pipeline():
         return pipeline_components
 
     print("初始化流水线组件...")
-    retriever = BestsellerRetriever()
+
+    # 使用混合检索器（Milvus + Neo4j）
+    retriever = create_hybrid_retriever(
+        milvus_weight=0.6,
+        graph_weight=0.4
+    )
     embed_gen = EmbeddingGenerator()
     image_gen = ImageGenerator()
     tfidf = None
 
     # 检查数据库是否已初始化
-    if retriever.has_collection():
-        stats = retriever.get_collection_stats()
+    # 混合检索器内部有 BestsellerRetriever，可以通过它访问 Milvus
+    milvus_retriever = retriever.milvus_retriever
+    if milvus_retriever.has_collection():
+        stats = milvus_retriever.get_collection_stats()
         if stats.get('row_count', 0) > 0:
             print(f"数据库已就绪，包含 {stats['row_count']} 条记录")
             # 加载 TF-IDF
@@ -133,21 +144,24 @@ def ensure_database():
     """确保数据库已初始化"""
     components = init_pipeline()
 
-    if not components['retriever'].has_collection():
+    # 混合检索器内部有 BestsellerRetriever，通过它访问 Milvus
+    milvus_retriever = components['retriever'].milvus_retriever
+
+    if not milvus_retriever.has_collection():
         print("数据库未初始化，开始初始化...")
-        components['retriever'].create_collection()
+        milvus_retriever.create_collection()
 
         # 生成嵌入向量
         products, dense_vectors, sparse_vectors, tfidf = \
             components['embed_gen'].process_all_embeddings()
 
         # 插入数据库
-        components['retriever'].insert_products(products, dense_vectors, sparse_vectors)
+        milvus_retriever.insert_products(products, dense_vectors, sparse_vectors)
 
         # 保存 TF-IDF
         components['tfidf'] = tfidf
 
-        stats = components['retriever'].get_collection_stats()
+        stats = milvus_retriever.get_collection_stats()
         print(f"数据库初始化完成! 共 {stats['row_count']} 条记录")
 
     return components
@@ -184,7 +198,9 @@ def process_image_task(
     season: str,
     scene_hint: str,
     enable_quality_check: bool = False,
-    judge_model: str = ""
+    judge_model: str = "",
+    retrieval_mode: str = "hybrid",
+    sales_top_k: int = 100
 ):
     """后台处理图片生成任务"""
     try:
@@ -234,22 +250,43 @@ def process_image_task(
         print(f"      ✓ Sparse向量: {len(query_sparse)}个非零项")
         tasks[task_id]['progress'] = 0.35
 
-        # 检索相似爆款（循环检索 + 查询重写 + 质量评估）
+        # 检索相似爆款
         print("\n[4/6] 检索相似爆款...")
+        print(f"      检索模式: {retrieval_mode}")
 
-        retrieved = components['retriever'].retrieve_similar_bestsellers(
-            query_dense=query_dense.tolist(),
-            query_sparse=query_sparse,
-            category=category,
-            top_k=3,           # 期望返回数量
-            min_similarity=1.0, # 相似度阈值（放宽，允许更多结果）
-            max_results=6,      # 最多返回6张
-            enable_cycle=True,  # 启用循环检索状态机
-            query_category=category,    # 用于质量评估
-            query_style=style,          # 用于质量评估
-            query_season=season,        # 用于质量评估
-            query_scene_hint=scene_hint # 用于质量评估
-        )
+        if retrieval_mode == "two_stage":
+            # 两阶段检索: Neo4j预过滤 + Milvus向量精排
+            retrieved = components['retriever'].two_stage_retrieve(
+                query_dense=query_dense.tolist(),
+                query_sparse=query_sparse,
+                category=category,
+                style=style,
+                season=season,
+                min_sales=1000,      # 最低销量
+                sales_top_k=sales_top_k,  # 销量TopK候选
+                top_k=3,             # 最终返回数量
+                enable_cycle=False,  # 两阶段检索通常不需要循环
+                query_category=category,
+                query_style=style,
+                query_season=season,
+                query_scene_hint=scene_hint
+            )
+        else:
+            # 默认混合检索: Milvus + Neo4j 并行 + RRF融合
+            retrieved = components['retriever'].retrieve_similar_bestsellers(
+                query_dense=query_dense.tolist(),
+                query_sparse=query_sparse,
+                category=category,
+                top_k=3,           # 期望返回数量
+                min_similarity=1.0, # 相似度阈值（放宽，允许更多结果）
+                max_results=6,      # 最多返回6张
+                enable_cycle=True,  # 启用循环检索状态机
+                query_category=category,    # 用于质量评估
+                query_style=style,          # 用于质量评估
+                query_season=season,        # 用于质量评估
+                query_scene_hint=scene_hint # 用于质量评估
+            )
+
         tasks[task_id]['progress'] = 0.55
 
         if not retrieved:
@@ -406,7 +443,9 @@ async def upload_and_generate(
     season: str = Form(default="all_season"),
     scene_hint: str = Form(default=""),
     enable_quality_check: bool = Form(default=False),
-    judge_model: str = Form(default="")
+    judge_model: str = Form(default=""),
+    retrieval_mode: str = Form(default="hybrid"),
+    sales_top_k: int = Form(default=100)
 ):
     """
     上传图片并生成宣传图
@@ -457,7 +496,9 @@ async def upload_and_generate(
             season,
             scene_hint,
             enable_quality_check,
-            judge_model
+            judge_model,
+            retrieval_mode,
+            sales_top_k
         )
 
         quality_msg = "（启用质量评估）" if enable_quality_check else ""
