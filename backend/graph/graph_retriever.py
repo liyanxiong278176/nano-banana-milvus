@@ -18,6 +18,7 @@
     ... )
 """
 import json
+import logging
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
@@ -28,6 +29,60 @@ from config import (
     IMAGE_DIR, MIN_SALES_COUNT
 )
 from utils import load_image
+
+logger = logging.getLogger(__name__)
+
+# 输入验证白名单
+VALID_CATEGORIES = {
+    'midi_dress', 'maxi_dress', 'mini_dress', 'skirt', 'top', 'pants',
+    'jumpsuit', 'playsuit', 'romper', 'bodysuit', 'overalls', 'dungarees'
+}
+
+VALID_STYLES = {
+    'casual', 'formal', 'sporty', 'elegant', 'vintage', 'modern',
+    'classic', 'boho', 'bohemian', 'romantic', 'minimalist', 'edgy',
+    'preppy', 'chic', 'streetwear', 'rock', 'feminine', 'masculine',
+    'knitted', 'drawstring', 'lace', 'floral', 'peasant', 'pencil',
+    'pleated', 'cropped', 'skinny', 'tailored', 'navy', 'camel', 'olive',
+    'pink', 'party', 'professional', 'blouse', 'bolero', 'linen', 'basic'
+}
+
+VALID_SEASONS = {
+    'all_season', 'spring', 'summer', 'autumn', 'winter'
+}
+
+
+def validate_category(category: Optional[str]) -> str:
+    """验证并规范化品类输入"""
+    if category is None:
+        return ""
+    category = category.strip().lower()
+    if category and category not in VALID_CATEGORIES:
+        logger.warning(f"未知品类: {category}，将忽略品类过滤")
+        return ""
+    return category
+
+
+def validate_style(style: Optional[str]) -> str:
+    """验证并规范化风格输入"""
+    if style is None:
+        return ""
+    style = style.strip().lower()
+    if style and style not in VALID_STYLES:
+        logger.warning(f"未知风格: {style}，将忽略风格过滤")
+        return ""
+    return style
+
+
+def validate_season(season: Optional[str]) -> str:
+    """验证并规范化季节输入"""
+    if season is None:
+        return "all_season"
+    season = season.strip().lower()
+    if season and season not in VALID_SEASONS:
+        logger.warning(f"未知季节: {season}，使用 all_season")
+        return "all_season"
+    return season
 
 
 class FashionGraphRetriever:
@@ -117,10 +172,10 @@ class FashionGraphRetriever:
 
     def retrieve_by_graph(
         self,
-        category: str = "",
-        style: str = "",
-        season: str = "",
-        scene_hint: str = "",
+        category: Optional[str] = None,
+        style: Optional[str] = None,
+        season: Optional[str] = None,
+        scene_hint: Optional[str] = None,
         top_k: int = 3,
         enable_multi_hop: bool = True,
         max_hops: int = 3
@@ -179,6 +234,19 @@ class FashionGraphRetriever:
         """
         if not self.is_connected():
             print("  ! Neo4j 未连接，返回空结果")
+            return []
+
+        # 输入验证和规范化
+        category = validate_category(category)
+        style = validate_style(style)
+        season = validate_season(season)
+        scene_hint = scene_hint.strip() if scene_hint else ""
+
+        # 检查图谱是否为空
+        stats = self.get_graph_stats()
+        node_count = stats.get('node_count', 0)
+        if node_count == 0:
+            logger.warning("Neo4j 图谱为空，跳过图谱检索")
             return []
 
         # 如果启用了多跳推理且有风格信息，使用多跳推理
@@ -811,9 +879,9 @@ class FashionGraphRetriever:
 
     def filter_candidate_products(
         self,
-        category: str = "",
-        style: str = "",
-        season: str = "",
+        category: Optional[str] = None,
+        style: Optional[str] = None,
+        season: Optional[str] = None,
         min_sales: int = 0,
         max_sales: int = None,
         min_price: float = None,
@@ -842,6 +910,11 @@ class FashionGraphRetriever:
         Returns:
             候选商品ID列表
         """
+        # 输入验证和规范化
+        category = validate_category(category)
+        style = validate_style(style)
+        season = validate_season(season)
+
         print(f"\n{'='*60}")
         print("【两阶段检索 - Stage 1】Neo4j 候选集过滤")
         print(f"{'='*60}")
@@ -946,10 +1019,10 @@ class FashionGraphRetriever:
 
     def multi_hop_retrieve(
         self,
-        category: str = "",
-        style: str = "",
-        season: str = "",
-        scene_hint: str = "",
+        category: Optional[str] = None,
+        style: Optional[str] = None,
+        season: Optional[str] = None,
+        scene_hint: Optional[str] = None,
         top_k: int = 3,
         max_hops: int = 3
     ) -> List[Dict[str, Any]]:
@@ -975,6 +1048,12 @@ class FashionGraphRetriever:
         if not self.is_connected():
             print("  ! Neo4j 未连接，返回空结果")
             return []
+
+        # 输入验证和规范化
+        category = validate_category(category)
+        style = validate_style(style)
+        season = validate_season(season)
+        scene_hint = scene_hint.strip() if scene_hint else ""
 
         print(f"\n{'='*60}")
         print("【多跳推理检索】风格扩展模式")
