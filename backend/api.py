@@ -270,11 +270,6 @@ def process_image_task(
                 min_sales=1000,      # 最低销量
                 sales_top_k=sales_top_k,  # 销量TopK候选
                 top_k=3,             # 最终返回数量
-                enable_cycle=False,  # 两阶段检索通常不需要循环
-                query_category=category,
-                query_style=style,
-                query_season=season,
-                query_scene_hint=scene_hint,
                 enable_multi_hop=enable_multi_hop,  # 启用多跳推理
                 max_hops=max_hops                       # 最大跳数
             )

@@ -454,15 +454,11 @@ class HybridRetriever:
         max_candidates: int = 1000,
         # Stage 2: Milvus 精排参数
         top_k: int = TOP_K_RETRIEVAL,
-        enable_cycle: bool = False,  # 两阶段检索通常不需要循环
-        # 质量评估参数
-        query_category: str = "",
-        query_style: str = "",
-        query_season: str = "",
-        query_scene_hint: str = "",
         # 多跳推理参数
         enable_multi_hop: bool = True,
-        max_hops: int = 3
+        max_hops: int = 3,
+        # 场景提示
+        query_scene_hint: str = ""
     ) -> List[Dict[str, Any]]:
         """
         两阶段检索架构：Neo4j 多跳推理 + Milvus 向量精排
@@ -471,11 +467,11 @@ class HybridRetriever:
         1. Neo4j 第一阶段：多跳推理扩展候选集
            - 第1跳: 目标风格直接匹配
            - 第2跳: 相似风格扩展
-           - 结合业务规则（品类、销量Top K）
+           - 第3跳: 跨品类扩展
         2. Milvus 第二阶段：在候选集中做向量相似度精排
 
         优势：
-        - 降低向��检索计算量（只在小范围候选集检索）
+        - 降低向量检索计算量（只在小范围候选集检索）
         - 结合业务规则（销量、点击率）和视觉相似度
         - 多跳推理扩展候选集，增加召回多样性
 
@@ -489,13 +485,9 @@ class HybridRetriever:
             sales_top_k: 取销量Top K
             max_candidates: 最大候选数量
             top_k: 最终返回数量
-            enable_cycle: 是否启用循环检索
-            query_category: 查询品类（质量评估用）
-            query_style: 查询风格（质量评估用）
-            query_season: 查询季节（质量评估用）
-            query_scene_hint: 查询场景（质量评估用）
             enable_multi_hop: 是否启用多跳推理（默认True）
             max_hops: 最大跳数（默认3）
+            query_scene_hint: 查询场景提示
 
         Returns:
             检索结果列表
@@ -544,7 +536,7 @@ class HybridRetriever:
 
         else:
             print("  [跳过] Neo4j 未启用，使用 Milvus 全量检索")
-            # 使用纯 Milvus 检索（单次检索，不需要循环）
+            # 使用纯 Milvus 检索（单次检索）
             milvus_results = self.milvus_retriever._single_retrieve(
                 query_dense=query_dense,
                 query_sparse=query_sparse,
@@ -573,23 +565,14 @@ class HybridRetriever:
         print(f"  候选集大小: {len(candidate_ids)} 个商品")
         print(f"  目标返回: {top_k} 个最相似商品")
 
-        # 在 Milvus 中检索（通过候选ID过滤）
-        # 注意：这里需要 Milvus 支持按ID列表过滤
-        # 如果 Milvus 不支持，则使用全量检索后过滤
-
         try:
-            # 调用 Milvus 检索（需要支持 candidate_ids 过滤）
+            # 调用 Milvus 检索（在候选集中精排）
             results = self._milvus_retrieve_with_candidates(
                 query_dense=query_dense,
                 query_sparse=query_sparse,
                 candidate_ids=candidate_ids,
-                category=category,  # 传递 category 给 Milvus
-                top_k=top_k,
-                enable_cycle=enable_cycle,
-                query_category=query_category,
-                query_style=query_style,
-                query_season=query_season,
-                query_scene_hint=query_scene_hint
+                category=category,
+                top_k=top_k
             )
 
             print(f"  [完成] 精排完成，返回 {len(results)} 个结果")
@@ -623,13 +606,8 @@ class HybridRetriever:
         query_dense: List[float],
         query_sparse: Dict[int, float],
         candidate_ids: List[str],
-        category: str = "",  # 添加 category 参数
-        top_k: int = 3,
-        enable_cycle: bool = False,
-        query_category: str = "",
-        query_style: str = "",
-        query_season: str = "",
-        query_scene_hint: str = ""
+        category: str = "",
+        top_k: int = 3
     ) -> List[Dict[str, Any]]:
         """
         Milvus 向量检索（在候选ID列表中检索）
@@ -638,24 +616,22 @@ class HybridRetriever:
             query_dense: 稠密查询向量
             query_sparse: 稀疏查询向量
             candidate_ids: 候选商品ID列表
-            category: 品类过滤（传递给 Milvus）
+            category: 品类过滤
             top_k: 返回数量
-            enable_cycle: 是否启用循环检索
-            query_category: ���询品类
-            query_style: 查询风格
-            query_season: 查询季节
-            query_scene_hint: 查询场景
 
         Returns:
             检索结果列表
         """
-        # 先获取全量结果 - 使用单次检索
+        print(f"\n  [Stage 2.1] 向量精排")
+        print(f"    候选集大小: {len(candidate_ids)}")
+
+        # 获取全量结果（扩大检索范围以确保能覆盖候选集）
         all_results = self.milvus_retriever._single_retrieve(
             query_dense=query_dense,
             query_sparse=query_sparse,
             category=category,
             min_sales=0,
-            top_k=top_k * 3
+            top_k=top_k * 5  # 扩大检索范围
         )
 
         # 过滤出候选集中的结果
@@ -664,6 +640,9 @@ class HybridRetriever:
             r for r in all_results
             if r.get("product_id") in candidate_set
         ]
+
+        print(f"    向量检索: {len(all_results)} 个结果")
+        print(f"    候选集过滤: {len(filtered_results)} 个结果")
 
         # 按相似度排序并返回top_k
         filtered_results.sort(key=lambda x: x.get("score", 0), reverse=True)
