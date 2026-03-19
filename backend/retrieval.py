@@ -1,11 +1,18 @@
 """
 爆款检索模块 - Milvus 数据库 + 混合检索 + 循环检索 + 质量评估
 """
+import sys
 from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image
 from pymilvus import MilvusClient, DataType, AnnSearchRequest, RRFRanker
 from openai import OpenAI
 import httpx
+
+# 修复 Windows 控制台编码问题
+if sys.platform == "win32":
+    import io as _io
+    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = _io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 from config import (
     MILVUS_URI, COLLECTION_NAME, EMBED_DIM,
@@ -292,6 +299,44 @@ class BestsellerRetriever:
                   f"相似度: {hit['distance']:.4f}")
             print("-" * 60)
 
+        # ==================== 【新增】降级逻辑 ====================
+        # 如果找不到结果，尝试只按品类检索（去掉风格和销量限制）
+        if not retrieved_with_images and category:
+            print(f"\n  [降级] 未找到匹配商品，尝试只按品类检索: {category}")
+
+            # 降低销量阈值，去掉风格限制
+            fallback_filter = f'category == "{category}"'
+            results = self._hybrid_search(
+                query_dense=query_dense,
+                query_sparse=query_sparse,
+                filter_expr=fallback_filter,
+                top_k=top_k * 2
+            )
+
+            for hit in results:
+                entity = hit["entity"]
+                product_id = entity["product_id"]
+
+                try:
+                    img_path = IMAGE_DIR / f"{product_id}.jpg"
+                    ref_img = load_image(str(img_path))
+                except FileNotFoundError:
+                    continue
+
+                result = {
+                    **entity,
+                    "score": hit["distance"],
+                    "image": ref_img,
+                    "fallback": True  # 标记为降级结果
+                }
+                retrieved_with_images.append(result)
+
+                if len(retrieved_with_images) >= max_results:
+                    break
+
+            if retrieved_with_images:
+                print(f"\n  [降级成功] 找到 {len(retrieved_with_images)} 个 {category} 商品")
+
         return retrieved_with_images
 
     # ==================== 循环检索（新增） ====================
@@ -477,7 +522,7 @@ class BestsellerRetriever:
                 results = self._process_raw_results(raw_results, min_similarity, max_results)
 
             if not results:
-                print(f"  ⚠ 第 {round_num} 轮检索无结果")
+                print(f"  [!] 第 {round_num} 轮检索无结果")
                 continue
 
             print(f"  ✓ 检索到 {len(results)} 个结果")
@@ -511,14 +556,14 @@ class BestsellerRetriever:
                 best_score = avg_score
                 best_results = results
                 best_round = round_num
-                print(f"    ⭐ 已更新为最佳结果")
+                print(f"    [*] 已更新为最佳结果")
 
             # 判断是否满足阈值
             if avg_score >= 7.0:
-                print(f"\n  ✓✓✓ 质量达标（≥7.0），提前返回第 {round_num} 轮结果")
+                print(f"\n  [OK] 质量达标 (>=7.0)，提前返回第 {round_num} 轮结果")
                 break
 
-            print(f"    ⚠ 质量未达标（<7.0），继续下一轮...")
+            print(f"    [!] 质量未达标 (<7.0)，继续下一轮...")
 
         # 循环结束
         print(f"\n{'═'*60}")

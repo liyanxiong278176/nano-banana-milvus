@@ -23,6 +23,12 @@ from pydantic import BaseModel, Field
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
+# 修复 Windows 控制台编码问题
+if sys.platform == "win32":
+    import io as _io
+    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = _io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 from config import (
     OPENROUTER_API_KEY, MILVUS_URI, COLLECTION_NAME,
     IMAGE_DIR, NEW_PRODUCT_DIR, OUTPUT_DIR, NEW_PRODUCT_CSV,
@@ -33,6 +39,17 @@ from retrieval import BestsellerRetriever
 from graph import HybridRetriever, create_hybrid_retriever
 from image_gen import ImageGenerator
 from utils import save_image
+
+# ==================== 【新增】LangGraph 工作流导入 ====================
+# 导入工作流相关模块
+try:
+    from workflow import create_workflow, prepare_state_with_components
+    from agents import create_initial_state
+    WORKFLOW_AVAILABLE = True
+except ImportError as e:
+    print(f"警告: LangGraph 工作流模块导入失败: {e}")
+    print("将使用原有线性流程")
+    WORKFLOW_AVAILABLE = False
 
 
 # ==================== Pydantic 模型 ====================
@@ -193,6 +210,167 @@ def save_to_csv(product_id: str, category: str, style: str, season: str, scene_h
         })
 
 
+# ==================== 【新增】LangGraph 工作流版本 ====================
+
+def process_image_task_with_workflow(
+    task_id: str,
+    file_bytes: bytes,
+    category: str,
+    style: str,
+    season: str,
+    scene_hint: str,
+    judge_model: str = "",
+    enable_multi_hop: bool = True,
+    max_hops: int = 3
+):
+    """
+    【新增】使用 LangGraph 工作流处理图片生成任务
+
+    Args:
+        task_id: 任务ID
+        file_bytes: 上传的图片字节流
+        category: 商品品类
+        style: 商品风格
+        season: 季节
+        scene_hint: 场景提示
+        judge_model: 质量评估模型
+        enable_multi_hop: 是否启用多跳推理
+        max_hops: 最大跳数
+    """
+    try:
+        print("\n" + "=" * 60)
+        print("  LangGraph Multi-Agent Workflow")
+        print("=" * 60)
+        print(f"  Task ID: {task_id[:8]}...")
+        print("=" * 60)
+
+        tasks[task_id]['status'] = 'processing'
+        tasks[task_id]['progress'] = 0.05
+
+        # ==================== 1. 初始化组件 ====================
+        print("\n[1/7] 初始化工作流组件...")
+        components = ensure_database()
+
+        # 创建工作流实例
+        app = create_workflow(
+            embed_gen=components['embed_gen'],
+            retriever=components['retriever'],
+            image_gen=components['image_gen'],
+            tfidf_vectorizer=components['tfidf'],
+            judge_model=judge_model or None
+        )
+
+        tasks[task_id]['progress'] = 0.1
+
+        # ==================== 2. 创建初始状态 ====================
+        print("[2/7] 创建工作流状态...")
+        state = create_initial_state(
+            task_id=task_id,
+            file_bytes=file_bytes,
+            category=category,
+            style=style,
+            season=season,
+            scene_hint=scene_hint
+        )
+
+        # 注入组件到状态
+        state = prepare_state_with_components(
+            state,
+            embed_gen=components['embed_gen'],
+            retriever=components['retriever'],
+            image_gen=components['image_gen'],
+            tfidf_vectorizer=components['tfidf'],
+            judge_model=judge_model or None
+        )
+
+        tasks[task_id]['progress'] = 0.15
+
+        # ==================== 3. 定义进度映射 ====================
+        step_progress_map = {
+            "upload": 0.2,
+            "embedding": 0.3,
+            "hybrid_retrieval": 0.5,
+            "style_analysis": 0.6,
+            "image_gen": 0.75,
+            "quality_judge": 0.85,
+            "result": 0.95,
+        }
+
+        # ==================== 4. 执行工作流（使用stream模式获取实时进度）====================
+        print("[3/7] 执行工作流...")
+        print("      流程: Upload → Embedding → Retrieval → Style → ImageGen → Quality → Result")
+
+        final_state = None
+        for chunk in app.stream(state):
+            # chunk 是节点名称到状态更新的映射
+            for node_name, node_state in chunk.items():
+                if node_name in step_progress_map:
+                    tasks[task_id]['progress'] = step_progress_map[node_name]
+                    print(f"      [{node_name}] 完成 - 进度: {step_progress_map[node_name]*100:.0f}%")
+                # 检查是否有错误
+                if isinstance(node_state, dict) and node_state.get("status") == "failed":
+                    tasks[task_id]['status'] = 'failed'
+                    tasks[task_id]['error'] = node_state.get('error_msg', '未知错误')
+                    raise Exception(node_state.get('error_msg', '工作流执行失败'))
+                # 保存最终状态
+                if isinstance(node_state, dict):
+                    final_state = node_state
+
+        # 确保 final_state 存在
+        if final_state is None:
+            final_state = state
+
+        tasks[task_id]['progress'] = 0.95
+
+        # ==================== 5. 提取最终结果 ====================
+        print("\n[4/7] 提取最终结果...")
+        final_result = final_state.get("final_result", {})
+
+        if not final_result:
+            raise Exception("工作流执行失败：未生成最终结果")
+
+        # ==================== 6. 更新任务结果 ====================
+        print("[5/7] 更新任务状态...")
+        tasks[task_id]['status'] = 'completed'
+        tasks[task_id]['progress'] = 1.0
+        tasks[task_id]['result'] = final_result
+
+        # ==================== 7. 打印证据链（调试用）====================
+        print("\n[6/7] 证据链追踪:")
+        evidence_chain = final_result.get('evidence_chain', [])
+        for i, evidence in enumerate(evidence_chain[-5:], 1):  # 只显示最后5条
+            print(f"  {i}. {evidence}")
+
+        # 打印指标埋点
+        print("\n[7/7] 指标埋点:")
+        metrics = final_result.get('metrics', {})
+        for key, value in sorted(metrics.items()):
+            print(f"  {key}: {value}")
+
+        print("\n" + "=" * 60)
+        print("  Task Completed!")
+        print("=" * 60 + "\n")
+
+    except Exception as e:
+        tasks[task_id]['status'] = 'failed'
+        error_msg = str(e)
+        tasks[task_id]['error'] = error_msg
+        print(f"\n{'='*60}")
+        print(f"  工作流任务 {task_id} 失败!")
+        print(f"{'='*60}")
+        print(f"  错误类型: {type(e).__name__}")
+        print(f"  错误信息: {error_msg}")
+        print(f"{'='*60}")
+
+        # 打印详细堆栈
+        import traceback
+        print("\n[详细堆栈信息]:")
+        traceback.print_exc()
+        print(f"{'='*60}\n")
+
+
+# ==================== 原有线性流程版本（保留兼容）====================
+
 def process_image_task(
     task_id: str,
     product_id: str,
@@ -209,12 +387,12 @@ def process_image_task(
 ):
     """后台处理图片生成任务"""
     try:
-        print("\n" + "╔" + "═" * 58 + "╗")
-        print("║" + " " * 15 + "电商 AI 生图流水线" + " " * 25 + "║")
-        print("║" + "═" * 58 + "║")
-        print(f"║  任务ID: {task_id[:8]}...                                      ║")
-        print(f"║  商品ID: {product_id}                              ║")
-        print("╚" + "═" * 58 + "╝")
+        print("\n" + "=" * 60)
+        print("  E-Commerce AI Image Generation Pipeline")
+        print("=" * 60)
+        print(f"  Task ID: {task_id[:8]}...")
+        print(f"  Product ID: {product_id}")
+        print("=" * 60)
 
         tasks[task_id]['status'] = 'processing'
         tasks[task_id]['progress'] = 0.1
@@ -232,7 +410,7 @@ def process_image_task(
 
         from utils import load_image
         new_img = load_image(str(img_path))
-        print(f"      ✓ 图片加载成功: {new_img.size[0]}x{new_img.size[1]}")
+        print(f"      [OK] Image loaded: {new_img.size[0]}x{new_img.size[1]}")
         tasks[task_id]['progress'] = 0.25
 
         # 构建新品数据
@@ -251,8 +429,8 @@ def process_image_task(
         query_dense, query_sparse, _ = components['embed_gen'].encode_new_product(
             new_product, components['tfidf']
         )
-        print(f"      ✓ Dense向量: {len(query_dense)}维")
-        print(f"      ✓ Sparse向量: {len(query_sparse)}个非零项")
+        print(f"      [OK] Dense vector: {len(query_dense)} dim")
+        print(f"      [OK] Sparse vector: {len(query_sparse)} non-zero entries")
         tasks[task_id]['progress'] = 0.35
 
         # 检索相似爆款
@@ -282,12 +460,12 @@ def process_image_task(
                 top_k=3,           # 期望返回数量
                 min_similarity=1.0, # 相似度阈值（放宽，允许更多结果）
                 max_results=6,      # 最多返回6张
-                enable_cycle=True,  # 启用循环检索状态机
+                enable_cycle=False, # 禁用循环检索，提升速度
                 query_category=category,    # 用于质量评估
                 query_style=style,          # 用于质量评估
                 query_season=season,        # 用于质量评估
                 query_scene_hint=scene_hint, # 用于质量评估
-                enable_multi_hop=enable_multi_hop,  # 多跳推理
+                enable_multi_hop=True,  # 启用多跳推理，让Neo4j扩展召回
                 max_hops=max_hops                  # 最大跳数
             )
 
@@ -298,7 +476,7 @@ def process_image_task(
 
         # 提取参考图片
         ref_images = [r["image"] for r in retrieved if r["image"]]
-        print(f"\n      ✓ 检索完成: 获得 {len(retrieved)} 个参考商品")
+        print(f"\n      [OK] Retrieval complete: {len(retrieved)} reference products")
         tasks[task_id]['progress'] = 0.6
 
         # 根据是否启用质量评估选择不同的处理方式
@@ -375,13 +553,13 @@ def process_image_task(
         tasks[task_id]['status'] = 'completed'
 
         # 完成日志
-        print(f"\n      ✓ 生成图片: {len(generated)} 张")
-        print(f"      ✓ 保存参考图: {len(retrieved)} 张")
-        print(f"      ✓ 输出目录: {output_dir}")
+        print(f"\n      [OK] Generated images: {len(generated)}")
+        print(f"      [OK] Saved reference images: {len(retrieved)}")
+        print(f"      [OK] Output directory: {output_dir}")
 
-        print("\n" + "╔" + "═" * 58 + "╗")
-        print("║" + " " * 20 + "任务完成!" + " " * 24 + "║")
-        print("╚" + "═" * 58 + "╝\n")
+        print("\n" + "=" * 60)
+        print("  Task Completed!")
+        print("=" * 60 + "\n")
         tasks[task_id]['result'] = {
             'product_id': product_id,
             'category': category,
@@ -448,10 +626,11 @@ async def upload_and_generate(
     scene_hint: str = Form(default=""),
     enable_quality_check: bool = Form(default=False),
     judge_model: str = Form(default=""),
-    retrieval_mode: str = Form(default="two_stage"),  # 两阶段检索（Neo4j多跳 + Milvus精排）
+    retrieval_mode: str = Form(default="hybrid"),  # 并行混合检索（Milvus+Neo4j + RRF融合）
     sales_top_k: int = Form(default=100),
     enable_multi_hop: bool = Form(default=True),
-    max_hops: int = Form(default=3)
+    max_hops: int = Form(default=3),
+    use_workflow: bool = Form(default=True)  # 【新增】是否使用LangGraph工作流
 ):
     """
     上传图片并生成宣传图
@@ -473,15 +652,8 @@ async def upload_and_generate(
     task_id = str(uuid.uuid4())
 
     try:
-        # 保存上传的图片
+        # 读取上传的图片字节流
         contents = await file.read()
-        img = Image.open(io.BytesIO(contents)).convert("RGB")
-
-        img_path = NEW_PRODUCT_DIR / f"{product_id}.jpg"
-        img.save(img_path, quality=90)
-
-        # 保存到 CSV
-        save_to_csv(product_id, category, style, season, scene_hint)
 
         # 创建任务
         tasks[task_id] = {
@@ -492,29 +664,55 @@ async def upload_and_generate(
             'created_at': time.time()
         }
 
-        # 添加后台任务
-        background_tasks.add_task(
-            process_image_task,
-            task_id,
-            product_id,
-            category,
-            style,
-            season,
-            scene_hint,
-            enable_quality_check,
-            judge_model,
-            retrieval_mode,
-            sales_top_k,
-            enable_multi_hop,
-            max_hops
-        )
+        # ==================== 【新增】选择工作流模式 ====================
+        if use_workflow and WORKFLOW_AVAILABLE:
+            # 使用 LangGraph 工作流
+            background_tasks.add_task(
+                process_image_task_with_workflow,
+                task_id,
+                contents,  # file_bytes
+                category,
+                style,
+                season,
+                scene_hint,
+                judge_model,
+                enable_multi_hop,
+                max_hops
+            )
+            workflow_msg = "（LangGraph工作流）"
+        else:
+            # 使用原有线性流程（保持兼容）
+            # 需要先保存图片文件
+            img = Image.open(io.BytesIO(contents)).convert("RGB")
+            img_path = NEW_PRODUCT_DIR / f"{product_id}.jpg"
+            img.save(img_path, quality=90)
+
+            # 保存到 CSV
+            save_to_csv(product_id, category, style, season, scene_hint)
+
+            background_tasks.add_task(
+                process_image_task,
+                task_id,
+                product_id,
+                category,
+                style,
+                season,
+                scene_hint,
+                enable_quality_check,
+                judge_model,
+                retrieval_mode,
+                sales_top_k,
+                enable_multi_hop,
+                max_hops
+            )
+            workflow_msg = "（传统流程）" if not use_workflow else "（工作流不可用）"
 
         quality_msg = "（启用质量评估）" if enable_quality_check else ""
         return GenerationResponse(
             task_id=task_id,
             status="pending",
             product_id=product_id,
-            message=f"图片上传成功，正在处理中{quality_msg}"
+            message=f"图片上传成功，正在处理中{quality_msg}{workflow_msg if use_workflow else ''}"
         )
 
     except Exception as e:
@@ -612,11 +810,9 @@ async def get_styles():
 def main():
     """启动服务"""
     print("""
-╔══════════════════════════════════════════════════════════╗
-║                                                          ║
-║        电商 AI 生图流水线 - FastAPI 服务                  ║
-║                                                          ║
-╚══════════════════════════════════════════════════════════╝
+============================================================
+  E-Commerce AI Image Generation Pipeline - FastAPI Service
+============================================================
     """)
 
     # 预初始化流水线

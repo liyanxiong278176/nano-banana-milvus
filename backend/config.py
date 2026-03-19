@@ -31,7 +31,7 @@ OPENROUTER_API_KEY = os.environ.get(
 EMBED_MODEL = "nvidia/llama-nemotron-embed-vl-1b-v2"  # 免费，支持图像+文本 → 2048维
 EMBED_DIM = 2048
 LLM_MODEL = "qwen/qwen3-vl-8b-instruct"  # 风格分析（免费，支持视觉+视频）
-IMAGE_GEN_MODEL = "black-forest-labs/flux.2-klein-4b"  # FLUX.2 Klein (价格更低: 首$0.014/MP, 后续$0.001/MP)
+IMAGE_GEN_MODEL = "black-forest-labs/flux.2-klein-4b"  # FLUX.2 Klein
 LIGHT_LLM_MODEL = "qwen/qwen3-vl-8b-instruct"  # 免费模型，用于检索质量评估
 
 # ==================== Milvus 配置 ====================
@@ -59,7 +59,7 @@ EMBED_BATCH_SIZE = 5          # 批量编码时的批次大小
 RATE_LIMIT_DELAY = 0.5        # API 调用间隔(秒)
 
 # ==================== 筛选条件 ====================
-MIN_SALES_COUNT = 1500        # 只检索销量超过此值的爆款
+MIN_SALES_COUNT = 500         # 只检索销量超过此值的爆款（降低阈值提高召回率）
 
 # ==================== 模型分级配置 ====================
 # 【新增】根据不同场景选择不同模型，平衡成本和质量

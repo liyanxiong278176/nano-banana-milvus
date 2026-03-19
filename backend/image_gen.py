@@ -436,27 +436,74 @@ class ImageGenerator:
         # 根据模型类型使用正确的 modalities
         modalities = self._get_model_modalities(IMAGE_GEN_MODEL)
 
-        gen_response = self.client.chat.completions.create(
-            model=IMAGE_GEN_MODEL,
-            messages=[{"role": "user", "content": gen_content}],
-            extra_body={
-                "modalities": modalities,
-                "image_config": {
-                    "aspect_ratio": aspect_ratio,
-                    "image_size": image_size
+        # ==================== 【调试】详细日志 ====================
+        print(f"\n[图像生成] 开始调用 API...")
+        print(f"  模型: {IMAGE_GEN_MODEL}")
+        print(f"  Modalities: {modalities}")
+        print(f"  宽高比: {aspect_ratio}")
+        print(f"  分辨率: {image_size}")
+        print(f"  Prompt 长度: {len(gen_prompt)} 字符")
+        print(f"  API Key: {OPENROUTER_API_KEY[:10]}...{OPENROUTER_API_KEY[-4:]}")
+        print(f"  超时设置: {API_TIMEOUT} 秒")
+
+        import time
+        start_time = time.time()
+
+        try:
+            print(f"\n[图像生成] 发送请求到 OpenRouter...")
+            gen_response = self.client.chat.completions.create(
+                model=IMAGE_GEN_MODEL,
+                messages=[{"role": "user", "content": gen_content}],
+                extra_body={
+                    "modalities": modalities,
+                    "image_config": {
+                        "aspect_ratio": aspect_ratio,
+                        "image_size": image_size
+                    },
                 },
-            },
-        )
+            )
+            elapsed = time.time() - start_time
+            print(f"\n[图像生成] API 响应成功! 耗时: {elapsed:.2f} 秒")
+            print(f"  响应类型: {type(gen_response)}")
+            print(f"  Choices 数量: {len(gen_response.choices)}")
 
-        # 提取生成的图片
-        generated_images = extract_images(gen_response)
+            # 检查响应内容
+            if gen_response.choices:
+                choice = gen_response.choices[0]
+                print(f"  Choice[0] role: {choice.message.role}")
+                print(f"  Choice[0] content 类型: {type(choice.message.content)}")
+                print(f"  Choice[0] content 长度: {len(str(choice.message.content))}")
 
-        # 检查是否有文本响应
-        text_content = gen_response.choices[0].message.content
-        if text_content:
-            print(f"\n模型响应: {text_content[:200]}...")
+                # 检查是否有额外字段
+                if hasattr(choice.message, '__dict__'):
+                    print(f"  Choice[0] 所有字段: {list(choice.message.__dict__.keys())}")
 
-        return generated_images
+            # 提取生成的图片
+            print(f"\n[图像生成] 提取生成的图片...")
+            generated_images = extract_images(gen_response)
+            print(f"  提取到 {len(generated_images)} 张图片")
+
+            # 检查是否有文本响应
+            text_content = gen_response.choices[0].message.content
+            if text_content:
+                print(f"\n  模型文本响应: {text_content[:200]}...")
+
+            print(f"\n[图像生成] 完成!")
+            return generated_images
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            print(f"\n[图像生成] API 调用失败! 耗时: {elapsed:.2f} 秒")
+            print(f"  错误类型: {type(e).__name__}")
+            print(f"  错误信息: {str(e)}")
+
+            # 详细错误信息
+            import traceback
+            print(f"\n[详细堆栈]:")
+            traceback.print_exc()
+
+            # 重新抛出异常
+            raise
 
     def process_single_product(
         self,
@@ -560,9 +607,9 @@ class ImageGenerator:
         should_regenerate, reason = judge.should_regenerate(score_result, threshold=min_score)
 
         if should_regenerate:
-            print(f"\n⚠️ 警告: {reason}")
+            print(f"\n[WARNING] {reason}")
         else:
-            print(f"\n✅ 质量合格")
+            print(f"\n[OK] 质量合格")
 
         return {
             'style_prompt': style_prompt,

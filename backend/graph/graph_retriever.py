@@ -1126,6 +1126,56 @@ class FashionGraphRetriever:
         # 取 top_k
         final_results = results_with_images[:top_k]
 
+        # ==================== 【新增】降级逻辑 ====================
+        # 如果找不到结果，尝试只按品类检索（放宽风格限制）
+        if not final_results and category:
+            print(f"\n  [降级] 未找到匹配商品，尝试只按品类检索: {category}")
+
+            cypher = """
+            MATCH (p:Product {category: $category})
+            RETURN p.product_id AS product_id,
+                   p.category AS category,
+                   p.style AS style,
+                   p.season AS season,
+                   p.color AS color,
+                   p.sales_count AS sales_count,
+                   p.price AS price,
+                   p.description AS description
+            ORDER BY p.sales_count DESC
+            LIMIT $top_k
+            """
+
+            try:
+                with self.driver.session(database=self.database) as session:
+                    records = session.run(cypher, {"category": category, "top_k": top_k})
+
+                    for record in records:
+                        try:
+                            img_path = IMAGE_DIR / f"{record['product_id']}.jpg"
+                            if img_path.exists():
+                                result = {
+                                    "product_id": record["product_id"],
+                                    "category": record["category"],
+                                    "style": record["style"],
+                                    "season": record["season"],
+                                    "color": record["color"],
+                                    "sales_count": record["sales_count"],
+                                    "price": record["price"],
+                                    "description": record["description"],
+                                    "score": 0.5,  # 降低评分，因为是降级结果
+                                    "hop_count": "fallback",
+                                    "match_reason": "category_fallback"
+                                }
+                                result["image"] = load_image(str(img_path))
+                                final_results.append(result)
+                        except Exception as e:
+                            print(f"    ! 降级加载图片失败 ({record['product_id']}): {e}")
+
+                    if final_results:
+                        print(f"  [降级成功] 找到 {len(final_results)} 个 {category} 商品")
+            except Exception as e:
+                print(f"  ! 降级检索失败: {e}")
+
         # ==================== 输出多跳推理摘要 ====================
         print(f"\n{'='*60}")
         print("【多跳推理摘要】")
