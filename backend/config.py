@@ -21,10 +21,16 @@ for dir_path in [IMAGE_DIR, NEW_PRODUCT_DIR, OUTPUT_DIR]:
     dir_path.mkdir(exist_ok=True)
 
 # ==================== API 配置 ====================
-# 从环境变量获取 API Key，如果没有设置则使用占位符
-OPENROUTER_API_KEY = os.environ.get(
-    "OPENROUTER_API_KEY",
-)
+# 从环境变量获取 API Key
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+
+# 验证 API Key 是否存在
+if not OPENROUTER_API_KEY:
+    raise ValueError(
+        "OPENROUTER_API_KEY 环境变量未设置。\n"
+        "请在 .env 文件中配置 OPENROUTER_API_KEY，或导出环境变量。\n"
+        "获取 API Key: https://openrouter.ai/keys"
+    )
 
 # ==================== 模型配置 ====================
 # 所有模型通过 OpenRouter API 调用，无需本地 GPU
@@ -50,6 +56,26 @@ RATE_LIMIT_DELAY = 0.5        # API 调用间隔(秒)
 
 # ==================== 筛选条件 ====================
 MIN_SALES_COUNT = 500         # 只检索销量超过此值的爆款（降低阈值提高召回率）
+
+# ==================== 检索配置常量 ====================
+# 检索候选数量配置
+RETRIEVAL_CANDIDATE_MULTIPLIER = 4  # 候选数量 = top_k * 候选倍数
+MIN_CANDIDATE_COUNT = 15            # 最小候选数量
+MAX_SIMILARITY_THRESHOLD = 0.5     # RRF 距离��值（越小越相关，0-1之间）
+
+# 参考图片数量限制
+MAX_REFERENCE_IMAGES_FOR_SCORING = 2   # 质量评估时最多使用的参考图数量
+MAX_REFERENCE_IMAGES_FOR_ANALYSIS = 3  # 风格分析时最多评估的参考图数量
+
+# 循环检索配置
+MAX_RETRIEVAL_ROUNDS = 3          # 最大检索轮数
+QUALITY_SCORE_THRESHOLD = 7.0     # 质量评估阈值（0-10分）
+RETRIEVAL_QUALITY_THRESHOLD = 6.0 # 检索质量评估阈值（0-10分）
+
+# 查询重写配置
+QUERY_REWRITE_SALES_HIGH = 1500  # 第1轮重写的高销量阈值
+QUERY_REWRITE_SALES_MID = 1000   # 第1轮重写的中销量阈值
+QUERY_REWRITE_SALES_LOW = 500    # 第2轮重写的低销量阈值
 
 # ==================== 模型分级配置 ====================
 # 【新增】根据不同场景选择不同模型，平衡成本和质量

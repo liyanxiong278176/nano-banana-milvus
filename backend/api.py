@@ -23,11 +23,9 @@ from pydantic import BaseModel, Field
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
-# 修复 Windows 控制台编码问题
-if sys.platform == "win32":
-    import io as _io
-    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = _io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+# 修复 Windows 控制台编码问题（统一使用工具模块）
+from console_utils import fix_console_encoding
+fix_console_encoding()
 
 from config import (
     OPENROUTER_API_KEY, MILVUS_URI, COLLECTION_NAME,

@@ -11,16 +11,13 @@ import httpx
 
 from config import (
     OPENROUTER_API_KEY, LLM_MODEL, IMAGE_GEN_MODEL,
-    DEFAULT_ASPECT_RATIO, DEFAULT_IMAGE_SIZE, ENABLE_CACHE
+    DEFAULT_ASPECT_RATIO, DEFAULT_IMAGE_SIZE, ENABLE_CACHE,
+    MAX_REFERENCE_IMAGES_FOR_SCORING
 )
 from utils import image_to_uri, extract_images, get_cache_key, save_to_cache, load_from_cache
 
 # 超时配置 (秒)
 API_TIMEOUT = 300  # 5 分钟 - LLM 和图片生成请求超时时间
-
-
-# 常量定义
-MAX_REFERENCE_IMAGES_FOR_SCORING = 2  # 质量评估时最多使用的参考图数量
 
 
 class ImageQualityJudge:

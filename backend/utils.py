@@ -265,6 +265,12 @@ def save_to_cache(cache_key: str, data: Union[Dict, str, list]) -> bool:
         cache_path = CACHE_DIR / cache_key
         with open(cache_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+
+        # 每10次保存后检查一次缓存大小，避免频繁检查
+        import random
+        if random.random() < 0.1:  # 10% 的概率触发清理检查
+            auto_clean_cache()
+
         return True
     except Exception as e:
         # 缓存写入失败时，静默处理，不影响主流程
@@ -323,6 +329,77 @@ def clear_cache(prefix: str = None) -> int:
     return count
 
 
+def get_cache_size_mb() -> float:
+    """
+    计算缓存目录的总大小（MB）
+
+    Returns:
+        缓存目录大小，单位 MB
+    """
+    total_size = 0
+    try:
+        for cache_file in CACHE_DIR.glob("*.json"):
+            total_size += cache_file.stat().st_size
+    except Exception:
+        pass
+    return total_size / (1024 * 1024)
+
+
+def auto_clean_cache(max_size_mb: float = None) -> int:
+    """
+    自动清理缓存：当缓存超过指定大小时，按 LRU 策略清理
+
+    Args:
+        max_size_mb: 最大缓存大小（MB），None 则使用 config.CACHE_MAX_SIZE_MB
+
+    Returns:
+        清理的文件数量
+
+    Note:
+        按文件的访问时间排序，删除最旧的文件直到缓存大小低于限制
+    """
+    from config import CACHE_MAX_SIZE_MB
+
+    if max_size_mb is None:
+        max_size_mb = CACHE_MAX_SIZE_MB
+
+    current_size = get_cache_size_mb()
+
+    if current_size <= max_size_mb:
+        return 0
+
+    # 获取所有缓存文件并按访问时间排序（最旧的在前）
+    cache_files = []
+    try:
+        for cache_file in CACHE_DIR.glob("*.json"):
+            stat = cache_file.stat()
+            cache_files.append((cache_file, stat.st_atime))
+
+        # 按访问时间排序（最旧的在前）
+        cache_files.sort(key=lambda x: x[1])
+
+        # 删除文件直到大小低于限制
+        count = 0
+        for cache_file, _ in cache_files:
+            cache_file.unlink()
+            count += 1
+
+            # 重新计算大小
+            current_size = get_cache_size_mb()
+            if current_size <= max_size_mb * 0.8:  # 清理到 80%
+                break
+
+        if count > 0:
+            print(f"[自动清理] 已清理 {count} 个旧缓存文件，"
+                  f"缓存大小从 {current_size + (count * 0.01):.1f}MB 降至 {current_size:.1f}MB")
+
+        return count
+
+    except Exception as e:
+        print(f"自动清理缓存失败: {e}")
+        return 0
+
+
 if __name__ == "__main__":
     print("工具函数模块测试")
     print(f"image_to_uri 函数: 将 PIL 图片转为 base64 URI")
@@ -330,8 +407,10 @@ if __name__ == "__main__":
     print(f"get_text_embedding 函数: 编码文本为向量")
     print(f"sparse_to_dict 函数: 转换稀疏向量格式")
     print(f"extract_images 函数: 从 API 响应提取图片")
-    # 新增缓存函数说明
+    # 缓存函数说明
     print(f"get_cache_key 函数: 生成缓存键")
     print(f"save_to_cache 函数: 保存数据到缓存")
     print(f"load_from_cache 函数: 从缓存加载数据")
     print(f"clear_cache 函数: 清理缓存文件")
+    print(f"get_cache_size_mb 函数: 获取缓存大小(MB)")
+    print(f"auto_clean_cache 函数: 自动清理过期缓存")

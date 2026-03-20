@@ -1,6 +1,7 @@
 """
 爆款检索模块 - Milvus 数据库 + 混合检索 + 循环检索 + 质量评估
 """
+import re
 import sys
 from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image
@@ -8,20 +9,77 @@ from pymilvus import MilvusClient, DataType, AnnSearchRequest, RRFRanker
 from openai import OpenAI
 import httpx
 
-# 修复 Windows 控制台编码问题
-if sys.platform == "win32":
-    import io as _io
-    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = _io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+# 修复 Windows 控制台编码问题（统一使用工具模块）
+from console_utils import fix_console_encoding
+fix_console_encoding()
 
 from config import (
     MILVUS_URI, COLLECTION_NAME, EMBED_DIM,
-    MIN_SALES_COUNT, IMAGE_DIR, OPENROUTER_API_KEY, LIGHT_LLM_MODEL, LLM_MODEL
+    MIN_SALES_COUNT, IMAGE_DIR, OPENROUTER_API_KEY, LIGHT_LLM_MODEL, LLM_MODEL,
+    RETRIEVAL_CANDIDATE_MULTIPLIER, MIN_CANDIDATE_COUNT,
+    MAX_SIMILARITY_THRESHOLD, MAX_REFERENCE_IMAGES_FOR_SCORING,
+    MAX_RETRIEVAL_ROUNDS, QUALITY_SCORE_THRESHOLD,
+    QUERY_REWRITE_SALES_HIGH, QUERY_REWRITE_SALES_MID, QUERY_REWRITE_SALES_LOW
 )
 from utils import load_image, image_to_uri
 
 # 超时配置 (秒)
 API_TIMEOUT = 300  # 5 分钟 - LLM 质量评估请求超时时间
+
+
+# ==================== 输入验证工具函数 ====================
+
+def _sanitize_category(category: str) -> str:
+    """
+    验证并清理品类输入，防止注入攻击
+
+    Args:
+        category: 品类名称
+
+    Returns:
+        清理后的品类名称
+
+    Raises:
+        ValueError: 如果品类名称包含非法字符
+    """
+    if not category:
+        return ""
+
+    # 只允许字母、数字、下划线
+    if not re.match(r'^[a-zA-Z0-9_]+$', category):
+        raise ValueError(
+            f"无效的品类名称: '{category}'。"
+            f"品类名称只能包含字母、数字和下划线。"
+        )
+    return category
+
+
+def _sanitize_string_input(value: str, max_length: int = 100) -> str:
+    """
+    验证并清理字符串输入
+
+    Args:
+        value: 输入字符串
+        max_length: 最大长度
+
+    Returns:
+        清理后的字符串
+    """
+    if not value:
+        return ""
+
+    # 去除首尾空白
+    value = value.strip()
+
+    # 限制长度
+    if len(value) > max_length:
+        value = value[:max_length]
+
+    # 移除可能的危险字符（用于 Milvus 过滤表达式）
+    # 注意：这里只做基础清理，不直接用于 SQL
+    value = value.replace('"', '').replace("'", "")
+
+    return value
 
 
 class BestsellerRetriever:
@@ -204,7 +262,7 @@ class BestsellerRetriever:
         category: str,
         min_sales: int = MIN_SALES_COUNT,
         top_k: int = 3,
-        min_similarity: float = 0.5,
+        min_similarity: float = MAX_SIMILARITY_THRESHOLD,
         max_results: int = 6
     ) -> List[Dict]:
         """
@@ -233,7 +291,7 @@ class BestsellerRetriever:
         print(f"  期望返回: {top_k} 张")
 
         # 执行检索，获取更多候选结果以便去重和过滤
-        candidate_count = max(top_k * 4, 15)  # 获取更多候选
+        candidate_count = max(top_k * RETRIEVAL_CANDIDATE_MULTIPLIER, MIN_CANDIDATE_COUNT)
         results = self._hybrid_search(
             query_dense=query_dense,
             query_sparse=query_sparse,
@@ -348,7 +406,7 @@ class BestsellerRetriever:
         category: str,
         min_sales: int = MIN_SALES_COUNT,
         top_k: int = 3,
-        min_similarity: float = 0.5,
+        min_similarity: float = MAX_SIMILARITY_THRESHOLD,
         max_results: int = 6,
         enable_cycle: bool = True,
         query_category: str = "",
@@ -397,7 +455,7 @@ class BestsellerRetriever:
         query_context = " | ".join(query_context_parts) if query_context_parts else "通用查询"
 
         # 定义最大轮数（需要在 enable_cycle 判断之前定义）
-        max_rounds = 3
+        max_rounds = MAX_RETRIEVAL_ROUNDS
 
         if not enable_cycle:
             # 禁用循环检索，使用原始单次检索逻辑
@@ -420,7 +478,7 @@ class BestsellerRetriever:
         print("=" * 60)
         print(f"查询条件: {query_context}")
         print(f"目标数量: {top_k} | 最大结果: {max_results}")
-        print(f"质量阈值: 7.0/10 | 最大轮次: {max_rounds}")
+        print(f"质量阈值: {QUALITY_SCORE_THRESHOLD}/10 | 最大轮次: {max_rounds}")
         print("=" * 60)
 
         # 初始化质量评估器
@@ -559,8 +617,8 @@ class BestsellerRetriever:
                 print(f"    [*] 已更新为最佳结果")
 
             # 判断是否满足阈值
-            if avg_score >= 7.0:
-                print(f"\n  [OK] 质量达标 (>=7.0)，提前返回第 {round_num} 轮结果")
+            if avg_score >= QUALITY_SCORE_THRESHOLD:
+                print(f"\n  [OK] 质量达标 (>={QUALITY_SCORE_THRESHOLD})，提前返回第 {round_num} 轮结果")
                 break
 
             print(f"    [!] 质量未达标 (<7.0)，继续下一轮...")
@@ -775,7 +833,7 @@ class RetrievalQualityJudge:
 
         # 如果有检索结果图片，加入图片进行视觉评估
         content = []
-        for result in retrieved_results[:3]:  # 最多评估前3张
+        for result in retrieved_results[:MAX_REFERENCE_IMAGES_FOR_SCORING]:  # 最多评估前N张
             if result.get("image"):
                 content.append({
                     "type": "image_url",
@@ -964,13 +1022,13 @@ def query_rewrite(
         # 风格匹配度低时，不添加风格过滤（原始过滤可能也没风格）
 
         # 销量阈值降低
-        new_parts.append("sales_count > 1000")
+        new_parts.append(f"sales_count > {QUERY_REWRITE_SALES_MID}")
 
         return " and ".join([p for p in new_parts if p])
 
     elif rewrite_round == 2:
         # 第2轮重写：只保留最低销量限制，最大化召回
-        return "sales_count > 500"
+        return f"sales_count > {QUERY_REWRITE_SALES_LOW}"
 
     else:
         # 未知轮次，返回原过滤

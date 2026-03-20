@@ -40,6 +40,10 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from retrieval_wrapper import RetrievalWrapper
+from config import (
+    QUERY_REWRITE_SALES_LOW,
+    MAX_RETRIEVAL_ROUNDS
+)
 
 
 class HybridRetrievalAgent(BaseAgent):
@@ -107,15 +111,15 @@ class HybridRetrievalAgent(BaseAgent):
             # 调用RetrievalWrapper的retrieve_similar_bestsellers方法
             #
             # 【检索策略】
-            # - 启用循环检索（enable_cycle=True）：通过3轮查询重写提高质量
+            # - 启用循环检索（enable_cycle=True）：通过多轮查询重写提高质量
             # - LLM质量评估驱动：根据评分自动调整查询条件
-            # - 降低销量阈值（min_sales=500）：提高召回率
-            # - 增加返回数量（top_k=6）：让后续Agent有更多选择
+            # - 降低销量阈值：提高召回率
+            # - 增加返回数量：让后续Agent有更多选择
             retrieved_results = self.retriever.retrieve_similar_bestsellers(
                 query_dense=query_dense,
                 query_sparse=query_sparse,
                 category=category,
-                min_sales=500,  # 降低销量阈值，提高召回率
+                min_sales=QUERY_REWRITE_SALES_LOW,  # 降低销量阈值，提高召回率
                 top_k=6,  # 增加返回数量，给后续Agent更多选择
                 enable_cycle=True,  # 【关键】启用循环检索状态机
                 query_category=category,
