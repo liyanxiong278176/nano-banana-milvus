@@ -242,7 +242,10 @@ class ImageGenerator:
             风格描述 prompt（仅包含拍摄风格，不包含服装款式）
         """
         print(f"\n使用 {LLM_MODEL} 分析爆款拍摄风格...")
-        print(f"  传入参考图数量: {len(reference_images)}")
+        print(f"{'='*50}")
+        print(f"  风格分析 - 参考图数量: {len(reference_images)}")
+        print(f"  缓存状态: {'启用' if ENABLE_CACHE else '禁用'}")
+        print(f"{'='*50}")
 
         if not reference_images:
             print("  警告: 没有参考图！")
@@ -254,11 +257,18 @@ class ImageGenerator:
             cache_content = "".join([image_to_uri(img) for img in reference_images])
             cache_key = get_cache_key("style_analysis", cache_content)
 
+            print(f"  [检查缓存] 键: {cache_key[:32]}...")
+
             # 尝试从缓存加载
             cached_result = load_from_cache(cache_key)
             if cached_result is not None:
-                print("  ✓ 使用缓存的风格分析结果")
+                print("\n" + "=" * 50)
+                print("  ✓✓✓ 缓存命中 ✓✓✓")
+                print("  跳过 LLM 分析，直接使用缓存结果")
+                print("=" * 50 + "\n")
                 return cached_result
+            else:
+                print("  [缓存未命中] 执行 LLM 风格分析...")
 
         # 对每张图单独分析风格
         individual_analyses = []
@@ -342,6 +352,10 @@ class ImageGenerator:
         # ==================== 【新增】保存到缓存 ====================
         if ENABLE_CACHE:
             save_to_cache(cache_key, result)
+            print(f"\n{'='*50}")
+            print(f"  [缓存已保存] 键: {cache_key[:32]}...")
+            print(f"  下次相同参考图将直接使用缓存")
+            print(f"{'='*50}\n")
 
         # 返回综合风格和每张图的分析
         return result

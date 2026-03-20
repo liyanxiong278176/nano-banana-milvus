@@ -36,7 +36,7 @@ from config import (
 )
 from embedding import EmbeddingGenerator
 from retrieval import BestsellerRetriever
-from graph import HybridRetriever, create_hybrid_retriever
+from retrieval_wrapper import RetrievalWrapper, create_retrieval_wrapper
 from image_gen import ImageGenerator
 from utils import save_image
 
@@ -62,12 +62,6 @@ class GenerationRequest(BaseModel):
     scene_hint: str = Field(default="", description="场景提示")
     enable_quality_check: bool = Field(default=False, description="是否启用质量评估")
     judge_model: str = Field(default="", description="裁判模型（空则使用默认模型）")
-    # 检索模式配置
-    retrieval_mode: str = Field(default="two_stage", description="检索模式: two_stage(两阶段检索+Neo4j多跳推理)")
-    sales_top_k: int = Field(default=100, description="两阶段检索-销量TopK候选数")
-    # 多跳推理配置
-    enable_multi_hop: bool = Field(default=True, description="是否启用多跳推理")
-    max_hops: int = Field(default=3, description="最大跳数")
 
 
 class GenerationResponse(BaseModel):
@@ -130,11 +124,8 @@ def init_pipeline():
 
     print("初始化流水线组件...")
 
-    # 使用混合检索器（Milvus + Neo4j）
-    retriever = create_hybrid_retriever(
-        milvus_weight=0.6,
-        graph_weight=0.4
-    )
+    # 使用检索包装器（Milvus 向量检索 + 循环检索状态机）
+    retriever = create_retrieval_wrapper()
     embed_gen = EmbeddingGenerator()
     image_gen = ImageGenerator()
     tfidf = None
@@ -219,9 +210,8 @@ def process_image_task_with_workflow(
     style: str,
     season: str,
     scene_hint: str,
-    judge_model: str = "",
-    enable_multi_hop: bool = True,
-    max_hops: int = 3
+    enable_quality_check: bool = False,
+    judge_model: str = ""
 ):
     """
     【新增】使用 LangGraph 工作流处理图片生成任务
@@ -233,9 +223,8 @@ def process_image_task_with_workflow(
         style: 商品风格
         season: 季节
         scene_hint: 场景提示
+        enable_quality_check: 是否启用AI质量评估
         judge_model: 质量评估模型
-        enable_multi_hop: 是否启用多跳推理
-        max_hops: 最大跳数
     """
     try:
         print("\n" + "=" * 60)
@@ -270,7 +259,8 @@ def process_image_task_with_workflow(
             category=category,
             style=style,
             season=season,
-            scene_hint=scene_hint
+            scene_hint=scene_hint,
+            enable_quality_check=enable_quality_check
         )
 
         # 注入组件到状态
@@ -344,8 +334,37 @@ def process_image_task_with_workflow(
         # 打印指标埋点
         print("\n[7/7] 指标埋点:")
         metrics = final_result.get('metrics', {})
+
+        # 指标名称中文映射
+        metric_name_map = {
+            "best_score": "最佳评分",
+            "cache_hit": "缓存命中",
+            "dense_dim": "稠密向量维度",
+            "embedding_time": "向量编码耗时(秒)",
+            "file_size_mb": "文件大小(MB)",
+            "generated_count": "生成图片数量",
+            "image_gen_time": "图片生成耗时(秒)",
+            "image_height": "图片高度",
+            "image_width": "图片宽度",
+            "individual_count": "独立分析数量",
+            "is_fallback": "是否使用默认值",
+            "quality_judge_time": "质量评估耗时(秒)",
+            "result_count": "检索结果数量",
+            "result_time": "结果处理耗时(秒)",
+            "retrieval_time": "检索耗时(秒)",
+            "retry_count": "重试次数",
+            "should_regenerate": "是否需要重新生成",
+            "sparse_nonzero": "稀疏向量非零元素",
+            "style_analysis_time": "风格分析耗时(秒)",
+            "total_time": "总耗时(秒)",
+            "upload_time": "上传耗时(秒)",
+            "fallback_triggered": "是否触发兜底",
+            "error_step": "错误发生步骤"
+        }
+
         for key, value in sorted(metrics.items()):
-            print(f"  {key}: {value}")
+            name = metric_name_map.get(key, key)
+            print(f"  {name}: {value}")
 
         print("\n" + "=" * 60)
         print("  Task Completed!")
@@ -379,11 +398,7 @@ def process_image_task(
     season: str,
     scene_hint: str,
     enable_quality_check: bool = False,
-    judge_model: str = "",
-    retrieval_mode: str = "hybrid",
-    sales_top_k: int = 100,
-    enable_multi_hop: bool = True,
-    max_hops: int = 3
+    judge_model: str = ""
 ):
     """后台处理图片生成任务"""
     try:
@@ -433,41 +448,21 @@ def process_image_task(
         print(f"      [OK] Sparse vector: {len(query_sparse)} non-zero entries")
         tasks[task_id]['progress'] = 0.35
 
-        # 检索相似爆款
+        # 检索相似爆款（循环检索状态机）
         print("\n[4/6] 检索相似爆款...")
-        print(f"      检索模式: {retrieval_mode}")
+        print("      检索模式: Milvus向量检索 + 循环检索状态机")
 
-        if retrieval_mode == "two_stage":
-            # 两阶段检索: Neo4j多跳推理 + Milvus向量精排
-            retrieved = components['retriever'].two_stage_retrieve(
-                query_dense=query_dense.tolist(),
-                query_sparse=query_sparse,
-                category=category,
-                style=style,
-                season=season,
-                min_sales=1000,      # 最低销量
-                sales_top_k=sales_top_k,  # 销量TopK候选
-                top_k=3,             # 最终返回数量
-                enable_multi_hop=enable_multi_hop,  # 启用多跳推理
-                max_hops=max_hops                       # 最大跳数
-            )
-        else:
-            # 默认混合检索: Milvus + Neo4j 并行 + RRF融合
-            retrieved = components['retriever'].retrieve_similar_bestsellers(
-                query_dense=query_dense.tolist(),
-                query_sparse=query_sparse,
-                category=category,
-                top_k=3,           # 期望返回数量
-                min_similarity=1.0, # 相似度阈值（放宽，允许更多结果）
-                max_results=6,      # 最多返回6张
-                enable_cycle=False, # 禁用循环检索，提升速度
-                query_category=category,    # 用于质量评估
-                query_style=style,          # 用于质量评估
-                query_season=season,        # 用于质量评估
-                query_scene_hint=scene_hint, # 用于质量评估
-                enable_multi_hop=True,  # 启用多跳推理，让Neo4j扩展召回
-                max_hops=max_hops                  # 最大跳数
-            )
+        retrieved = components['retriever'].retrieve_similar_bestsellers(
+            query_dense=query_dense.tolist(),
+            query_sparse=query_sparse,
+            category=category,
+            top_k=3,           # 期望返回数量
+            enable_cycle=True,  # 启用循环检索状态机
+            query_category=category,    # 用于质量评估
+            query_style=style,          # 用于质量评估
+            query_season=season,        # 用于质量评估
+            query_scene_hint=scene_hint # 用于质量评估
+        )
 
         tasks[task_id]['progress'] = 0.55
 
@@ -626,10 +621,6 @@ async def upload_and_generate(
     scene_hint: str = Form(default=""),
     enable_quality_check: bool = Form(default=False),
     judge_model: str = Form(default=""),
-    retrieval_mode: str = Form(default="hybrid"),  # 并行混合检索（Milvus+Neo4j + RRF融合）
-    sales_top_k: int = Form(default=100),
-    enable_multi_hop: bool = Form(default=True),
-    max_hops: int = Form(default=3),
     use_workflow: bool = Form(default=True)  # 【新增】是否使用LangGraph工作流
 ):
     """
@@ -675,9 +666,8 @@ async def upload_and_generate(
                 style,
                 season,
                 scene_hint,
-                judge_model,
-                enable_multi_hop,
-                max_hops
+                enable_quality_check,
+                judge_model
             )
             workflow_msg = "（LangGraph工作流）"
         else:
@@ -699,11 +689,7 @@ async def upload_and_generate(
                 season,
                 scene_hint,
                 enable_quality_check,
-                judge_model,
-                retrieval_mode,
-                sales_top_k,
-                enable_multi_hop,
-                max_hops
+                judge_model
             )
             workflow_msg = "（传统流程）" if not use_workflow else "（工作流不可用）"
 

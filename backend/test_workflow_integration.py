@@ -96,13 +96,13 @@ def test_workflow_integration():
 
     try:
         from embedding import EmbeddingGenerator
-        from graph import create_hybrid_retriever
+        from retrieval_wrapper import create_retrieval_wrapper
         from image_gen import ImageGenerator
 
         embed_gen = EmbeddingGenerator()
 
         # 检查数据库是否已初始化
-        retriever = create_hybrid_retriever()
+        retriever = create_retrieval_wrapper()
         milvus_retriever = retriever.milvus_retriever
 
         if not milvus_retriever.has_collection():
@@ -212,9 +212,36 @@ def test_workflow_integration():
         # 打印指标
         metrics = final_state.get("metrics", {})
         if metrics:
+            # 指标名称中文映射
+            metric_name_map = {
+                "best_score": "最佳评分",
+                "cache_hit": "缓存命中",
+                "dense_dim": "稠密向量维度",
+                "embedding_time": "向量编码耗时(秒)",
+                "file_size_mb": "文件大小(MB)",
+                "generated_count": "生成图片数量",
+                "image_gen_time": "图片生成耗时(秒)",
+                "image_height": "图片高度",
+                "image_width": "图片宽度",
+                "individual_count": "独立分析数量",
+                "is_fallback": "是否使用默认值",
+                "quality_judge_time": "质量评估耗时(秒)",
+                "result_count": "检索结果数量",
+                "result_time": "结果处理耗时(秒)",
+                "retrieval_time": "检索耗时(秒)",
+                "retry_count": "重试次数",
+                "should_regenerate": "是否需要重新生成",
+                "sparse_nonzero": "稀疏向量非零元素",
+                "style_analysis_time": "风格分析耗时(秒)",
+                "total_time": "总耗时(秒)",
+                "upload_time": "上传耗时(秒)",
+                "fallback_triggered": "是否触发兜底",
+                "error_step": "错误发生步骤"
+            }
             print(f"\n  指标埋点:")
             for key, value in sorted(metrics.items()):
-                print(f"    {key}: {value}")
+                name = metric_name_map.get(key, key)
+                print(f"    {name}: {value}")
 
         # 检查最终结果
         final_result = final_state.get("final_result")

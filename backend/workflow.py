@@ -66,7 +66,7 @@ from agents import (
     FallbackAgent,
 )
 from embedding import EmbeddingGenerator
-from graph import HybridRetriever, create_hybrid_retriever
+from retrieval_wrapper import RetrievalWrapper, create_retrieval_wrapper
 from image_gen import ImageGenerator
 from config import LLM_MODEL
 
@@ -94,7 +94,7 @@ def hybrid_retrieval_node(state: PipelineState) -> PipelineState:
     """混合检索节点"""
     retriever = state.get("_retriever")
     if not retriever:
-        raise ValueError("HybridRetriever未初始化")
+        raise ValueError("RetrievalWrapper未初始化")
 
     agent = HybridRetrievalAgent(retriever)
     return agent.run(state)
@@ -141,6 +141,25 @@ def fallback_node(state: PipelineState) -> PipelineState:
 
 # ==================== 条件边函数 ====================
 
+def should_use_quality_judge(state: PipelineState) -> Literal["use_quality", "skip_quality"]:
+    """
+    判断是否使用质量评估
+
+    Args:
+        state: 当前工作流状态
+
+    Returns:
+        "use_quality" - 启用质量评估，执行QualityJudgeAgent
+        "skip_quality" - 跳过质量评估，直接完成
+    """
+    enable_quality_check = state.get("enable_quality_check", False)
+
+    if enable_quality_check:
+        return "use_quality"
+    else:
+        return "skip_quality"
+
+
 def should_regenerate_condition(state: PipelineState) -> Literal["regenerate", "finish"]:
     """
     判断是否需要重新生成
@@ -164,7 +183,7 @@ def should_regenerate_condition(state: PipelineState) -> Literal["regenerate", "
 
 def create_workflow(
     embed_gen: EmbeddingGenerator = None,
-    retriever: HybridRetriever = None,
+    retriever: RetrievalWrapper = None,
     image_gen: ImageGenerator = None,
     tfidf_vectorizer = None,
     judge_model: str = None
@@ -174,7 +193,7 @@ def create_workflow(
 
     Args:
         embed_gen: EmbeddingGenerator实例
-        retriever: HybridRetriever实例
+        retriever: RetrievalWrapper实例
         image_gen: ImageGenerator实例
         tfidf_vectorizer: TF-IDF向量化器
         judge_model: 质量评估模型
@@ -213,10 +232,17 @@ def create_workflow(
     # 5. StyleAnalysis → ImageGen
     builder.add_edge("style_analysis", "image_gen")
 
-    # 6. ImageGen → QualityJudge
-    builder.add_edge("image_gen", "quality_judge")
+    # 6. ImageGen → 条件分支（是否使用质量评估）
+    builder.add_conditional_edges(
+        "image_gen",
+        should_use_quality_judge,
+        {
+            "use_quality": "quality_judge",  # 启用质量评估
+            "skip_quality": "result"          # 跳过质量评估，直接完成
+        }
+    )
 
-    # 7. QualityJudge → 条件分支
+    # 7. QualityJudge → 条件分支（是否重新生成）
     builder.add_conditional_edges(
         "quality_judge",
         should_regenerate_condition,
@@ -245,7 +271,7 @@ def create_workflow(
 def prepare_state_with_components(
     state: PipelineState,
     embed_gen: EmbeddingGenerator,
-    retriever: HybridRetriever,
+    retriever: RetrievalWrapper,
     image_gen: ImageGenerator,
     tfidf_vectorizer,
     judge_model: str = None
@@ -256,7 +282,7 @@ def prepare_state_with_components(
     Args:
         state: 原始状态
         embed_gen: EmbeddingGenerator实例
-        retriever: HybridRetriever实例
+        retriever: RetrievalWrapper实例
         image_gen: ImageGenerator实例
         tfidf_vectorizer: TF-IDF向量化器
         judge_model: 质量评估模型
@@ -286,7 +312,7 @@ def run_workflow(
     season: str = "all_season",
     scene_hint: str = "",
     embed_gen: EmbeddingGenerator = None,
-    retriever: HybridRetriever = None,
+    retriever: RetrievalWrapper = None,
     image_gen: ImageGenerator = None,
     tfidf_vectorizer = None,
     judge_model: str = None,
@@ -302,7 +328,7 @@ def run_workflow(
         season: 季节
         scene_hint: 场景提示
         embed_gen: EmbeddingGenerator实例
-        retriever: HybridRetriever实例
+        retriever: RetrievalWrapper实例
         image_gen: ImageGenerator实例
         tfidf_vectorizer: TF-IDF向量化器
         judge_model: 质量评估模型
@@ -390,12 +416,12 @@ if __name__ == "__main__":
 
     try:
         from embedding import EmbeddingGenerator
-        from graph import create_hybrid_retriever
+        from graph import create_retrieval_wrapper
         from image_gen import ImageGenerator
         from config import PRODUCT_CSV
 
         embed_gen = EmbeddingGenerator()
-        retriever = create_hybrid_retriever()
+        retriever = create_retrieval_wrapper()
         image_gen = ImageGenerator()
 
         # 加载产品数据并构建TF-IDF

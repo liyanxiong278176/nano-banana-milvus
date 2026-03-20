@@ -55,6 +55,7 @@ class PipelineState(TypedDict):
     best_image: Optional[Image.Image]   # 质量评估后的最佳图片
 
     # ==================== 质量评估 ====================
+    enable_quality_check: bool       # 是否启用AI质量评估（前端控制）
     quality_scores: Dict[str, Any]   # 质量评分结果（各维度得分+总分）
     should_regenerate: bool          # 是否需要重新生成（评分低于阈值时为True）
     regenerate_reason: str           # 重新生成的原因说明（如"服装准确性不足"）
@@ -81,7 +82,7 @@ class PipelineState(TypedDict):
     # 以下字段用于在工作流中传递组件实例，使用下划线前缀避免与业务字段冲突
     # 注意：LangGraph 1.0+ TypedDict 需要包含所有可能的字段
     _embed_gen: Optional[Any]        # EmbeddingGenerator实例
-    _retriever: Optional[Any]        # HybridRetriever实例
+    _retriever: Optional[Any]        # RetrievalWrapper实例
     _image_gen: Optional[Any]        # ImageGenerator实例
     _tfidf: Optional[Any]            # TF-IDF向量化器
     _judge_model: Optional[str]      # 质量评估模型名称
@@ -93,7 +94,8 @@ def create_initial_state(
     category: str,
     style: str,
     season: str = "all_season",
-    scene_hint: str = ""
+    scene_hint: str = "",
+    enable_quality_check: bool = False
 ) -> PipelineState:
     """
     创建初始状态
@@ -105,6 +107,7 @@ def create_initial_state(
         style: 商品风格
         season: 季节
         scene_hint: 场景提示
+        enable_quality_check: 是否启用AI质量评估
 
     Returns:
         初始化的PipelineState字典
@@ -137,6 +140,7 @@ def create_initial_state(
         best_image=None,
 
         # 质量评估（初始为空）
+        enable_quality_check=enable_quality_check,
         quality_scores={},
         should_regenerate=False,
         regenerate_reason="",

@@ -1,23 +1,22 @@
 """
-混合检索Agent - HybridRetrievalAgent
+检索Agent - HybridRetrievalAgent
 
-负责执行Milvus向量检索和Neo4j图谱检索的混合融合。
+负责执行Milvus向量检索，支持循环检索状态机和查询重写。
 
 【职责】
-1. 调用HybridRetriever进行混合检索（RRF融合算法）
-2. 采用多路召回架构：Milvus向量 + Neo4j多跳推理
-3. RRF融合结果，平衡两个召回源
+1. 调用RetrievalWrapper进行向量检索
+2. 支持循环检索状态机：最多3轮查询重写
+3. 支持质量评估和智能降级机制
 
 【优化策略】
-- 关掉循环检索：避免3轮查询重写的开销，提升速度
-- 保留多跳推理：让Neo4j通过风格相似性扩展候选集
+- 启用循环检索：通过3轮查询重写提高检索质量
 - 降低销量阈值：提高召回率（min_sales=500）
 - 增加返回数量：给后续Agent更多选择（top_k=6）
 
 【架构优势】
-- 解耦设计：两个检索器独立，易于扩展
-- 故障隔离：一个检索器失败不影响整体
-- 权重可调：支持A/B测试优化
+- 简洁设计：单一Milvus检索引擎
+- 循环优化：基于质量评分自动调整查询条件
+- 智能降级：无结果时自动放宽过滤条件
 
 【输入】state字段
 - query_dense: 稠密查询向量
@@ -29,7 +28,7 @@
 - retrieved_results: 检索结果列表（包含完整元数据）
 - ref_images: 参考图片列表
 - evidence_chain: 追加证据（含匹配理由）
-- metrics: 记录retrieval_time, result_count, milvus_count, graph_count
+- metrics: 记录retrieval_time, result_count
 """
 from typing import List, Dict, Any
 
@@ -40,27 +39,27 @@ from .state import PipelineState
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from graph import HybridRetriever
+from retrieval_wrapper import RetrievalWrapper
 
 
 class HybridRetrievalAgent(BaseAgent):
     """
-    混合检索Agent
+    检索Agent
 
-    执行Milvus + Neo4j混合检索，融合向量相似度和图谱关联度。
+    执行Milvus向量检索，支持循环检索状态机和查询重写。
 
     【复用原有逻辑】
-    - 复用graph/hybrid_retriever.py的HybridRetriever
-    - 支持循环检索和多跳推理
-    - RRF融合算法
+    - 使用retrieval_wrapper.py的RetrievalWrapper
+    - 支持循环检索和查询重写
+    - LLM质量评估驱动查询优化
     """
 
-    def __init__(self, retriever: HybridRetriever):
+    def __init__(self, retriever: RetrievalWrapper):
         """
-        初始化混合检索Agent
+        初始化检索Agent
 
         Args:
-            retriever: HybridRetriever实例（已初始化）
+            retriever: RetrievalWrapper实例（已初始化）
         """
         super().__init__("HybridRetrievalAgent")
         self.retriever = retriever
@@ -68,7 +67,7 @@ class HybridRetrievalAgent(BaseAgent):
     @time_decorator("retrieval_time")
     def run(self, state: PipelineState) -> PipelineState:
         """
-        执行混合检索流程
+        执行检索流程
 
         Args:
             state: 包含query_dense, query_sparse和过滤条件的状态
@@ -104,30 +103,25 @@ class HybridRetrievalAgent(BaseAgent):
                 f"开始检索: 品类={category or 'All'}, 风格={style or 'All'}, 季节={season or 'All'}"
             )
 
-            # ==================== 2. 执行混合检索 ====================
-            # 调用HybridRetriever的retrieve_similar_bestsellers方法
+            # ==================== 2. 执行向量检索（循环检索状态机）====================
+            # 调用RetrievalWrapper的retrieve_similar_bestsellers方法
             #
-            # 【优化策略】
-            # - 关掉循环检索（enable_cycle=False）：避免3轮查询重写的开销
-            # - 保留多跳推理（enable_multi_hop=True）：让Neo4j扩展候选集
+            # 【检索策略】
+            # - 启用循环检索（enable_cycle=True）：通过3轮查询重写提高质量
+            # - LLM质量评估驱动：根据评分自动调整查询条件
             # - 降低销量阈值（min_sales=500）：提高召回率
             # - 增加返回数量（top_k=6）：让后续Agent有更多选择
             retrieved_results = self.retriever.retrieve_similar_bestsellers(
                 query_dense=query_dense,
                 query_sparse=query_sparse,
                 category=category,
-                style=style,
-                season=season,
-                scene_hint=scene_hint,
                 min_sales=500,  # 降低销量阈值，提高召回率
                 top_k=6,  # 增加返回数量，给后续Agent更多选择
-                enable_cycle=False,  # 【优化】关掉循环检索，提升速度
+                enable_cycle=True,  # 【关键】启用循环检索状态机
                 query_category=category,
                 query_style=style,
                 query_season=season,
-                query_scene_hint=scene_hint,
-                enable_multi_hop=True,  # 保留多跳推理，扩展候选集
-                max_hops=3
+                query_scene_hint=scene_hint
             )
 
             if not retrieved_results:
@@ -154,36 +148,24 @@ class HybridRetrievalAgent(BaseAgent):
                 style_match = result.get("style", "N/A")
                 sales_count = result.get("sales_count", 0)
                 score = result.get("score", 0)
-                source = result.get("source", "unknown")  # milvus/graph/hybrid
 
                 # 构建匹配理由
                 match_reason = (
                     f"结果{i}: {product_id} | 匹配理由: "
                     f"品类={category_match}, 风格={style_match}, "
-                    f"销量={sales_count}, 相似度={score:.4f}, 来源={source}"
+                    f"销量={sales_count}, 相似度={score:.4f}"
                 )
                 self._add_evidence(state, match_reason)
 
             # ==================== 5. 记录指标 ====================
             self._log_metric(state, "result_count", result_count)
 
-            # 统计来源分布
-            source_counts = {"milvus": 0, "graph": 0, "hybrid": 0}
-            for result in retrieved_results:
-                source = result.get("source", "unknown")
-                if source in source_counts:
-                    source_counts[source] += 1
-
-            self._log_metric(state, "milvus_count", source_counts["milvus"])
-            self._log_metric(state, "graph_count", source_counts["graph"])
-            self._log_metric(state, "hybrid_count", source_counts["hybrid"])
-
             return state
 
         except Exception as e:
-            return self._handle_error(state, f"混合检索失败: {str(e)}")
+            return self._handle_error(state, f"检索失败: {str(e)}")
 
 
 if __name__ == "__main__":
-    print("HybridRetrievalAgent需要真实的HybridRetriever实例才能完整测试")
+    print("HybridRetrievalAgent需要真实的RetrievalWrapper实例才能完整测试")
     print("请通过workflow.py中的完整流程进行测试")
