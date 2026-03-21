@@ -183,12 +183,12 @@ class ImageQualityJudge:
 
         # 默认分数（标识为后备值）
         return {
-            "clothing_accuracy": 3,
-            "pose_naturalness": 3,
-            "scene_quality": 3,
-            "lighting_quality": 3,
-            "commercial_value": 3,
-            "average": 3.0,
+            "clothing_accuracy": 6,
+            "pose_naturalness": 6,
+            "scene_quality": 6,
+            "lighting_quality": 6,
+            "commercial_value": 6,
+            "average": 6.0,
             "is_fallback": True  # 标识这是默认值
         }
 
@@ -214,7 +214,7 @@ class ImageQualityJudge:
 - 图片2：AI 生成的宣传图
 - {ref_text}
 
-请评估生成的宣传图（图片2）的质量，对以下维度进行评分（1-5分）：
+请评估生成的宣传图（图片2）的质量，对以下维度进行评分（1-10分）：
 
 1. **clothing_accuracy**（服装准确性）：图片2中的服装与图片1中的原始产品匹配度
 2. **pose_naturalness**（姿势自然度）：模特的姿势和服装合身度是否自然
@@ -223,20 +223,20 @@ class ImageQualityJudge:
 5. **commercial_value**（商业价值）：总体来说，这张图片适合电商使用吗
 
 **评分标准**：
-- 5分：优秀，完全符合要求
-- 4分：良好，基本符合要求
-- 3分：一般，有可改进之处
-- 2分：较差，需要明显改进
-- 1分：很差，不符合要求
+- 9-10分：优秀，完全符合要求，可直接使用
+- 7-8分：良好，基本符合要求，轻微修图后可用
+- 5-6分：一般，有可改进之处，需要较多修图
+- 3-4分：较差，需要明显改进或重新生成
+- 1-2分：很差，不符合要求，不建议使用
 
 只输出JSON格式，例如：
-{{"clothing_accuracy": 4, "pose_naturalness": 3, "scene_quality": 5, "lighting_quality": 4, "commercial_value": 4}}
+{{"clothing_accuracy": 8, "pose_naturalness": 7, "scene_quality": 9, "lighting_quality": 8, "commercial_value": 8}}
 """
 
     def should_regenerate(
         self,
         scores: Dict[str, any],
-        threshold: float = 3.5
+        threshold: float = 7.0
     ) -> Tuple[bool, str]:
         """
         判断是否需要重新生成
@@ -266,7 +266,7 @@ class ImageQualityJudge:
             return True, f"{dim_names.get(lowest_dim[0], lowest_dim[0])}得分过低({lowest_dim[1]})，建议重新生成"
 
         # 检查关键维度
-        if scores.get('clothing_accuracy', 5) < 4:
+        if scores.get('clothing_accuracy', 10) < 8:
             return True, f"服装准确性不足({scores['clothing_accuracy']})，服装与原图不匹配"
 
         return False, "质量合格"

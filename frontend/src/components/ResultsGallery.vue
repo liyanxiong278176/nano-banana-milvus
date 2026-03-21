@@ -37,7 +37,7 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M8 1L10 6L15 3M8 1L6 6L1 3M8 1V11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            最高分: {{ getHighestScore(result) }}/5
+            最高分: {{ getHighestScore(result) }}/10
           </span>
         </div>
         <div class="generated-grid">
@@ -63,27 +63,27 @@
             <!-- 评分 -->
             <div v-if="hasAllScores(result)" class="image-scores">
               <div class="score-summary">
-                <span class="total-score">{{ getImageScore(result, idx) }}/5</span>
+                <span class="total-score">{{ getImageScore(result, idx) }}/10</span>
                 <span class="score-label">总分</span>
               </div>
               <div class="score-breakdown">
-                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'clothing_accuracy') >= 4 }">
+                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'clothing_accuracy') >= 8 }">
                   <span class="mini-label">服装</span>
                   <span class="mini-value">{{ getScoreValue(result, idx, 'clothing_accuracy') }}</span>
                 </div>
-                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'pose_naturalness') >= 4 }">
+                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'pose_naturalness') >= 8 }">
                   <span class="mini-label">姿势</span>
                   <span class="mini-value">{{ getScoreValue(result, idx, 'pose_naturalness') }}</span>
                 </div>
-                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'scene_quality') >= 4 }">
+                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'scene_quality') >= 8 }">
                   <span class="mini-label">场景</span>
                   <span class="mini-value">{{ getScoreValue(result, idx, 'scene_quality') }}</span>
                 </div>
-                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'lighting_quality') >= 4 }">
+                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'lighting_quality') >= 8 }">
                   <span class="mini-label">布光</span>
                   <span class="mini-value">{{ getScoreValue(result, idx, 'lighting_quality') }}</span>
                 </div>
-                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'commercial_value') >= 4 }">
+                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'commercial_value') >= 8 }">
                   <span class="mini-label">商业</span>
                   <span class="mini-value">{{ getScoreValue(result, idx, 'commercial_value') }}</span>
                 </div>

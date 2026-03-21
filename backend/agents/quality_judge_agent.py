@@ -55,7 +55,7 @@ class QualityJudgeAgent(BaseAgent):
     - 支持多维度评分（服装准确性、姿势自然度、场景质量等）
     """
 
-    def __init__(self, model: str = None, min_score: float = 3.5, max_retry: int = 1):
+    def __init__(self, model: str = None, min_score: float = 7.0, max_retry: int = 1):
         """
         初始化质量评估Agent
 
@@ -136,7 +136,7 @@ class QualityJudgeAgent(BaseAgent):
 
             self._add_evidence(
                 state,
-                f"评分完成: 总分={avg_score:.1f}/5 "
+                f"评分完成: 总分={avg_score:.1f}/10 "
                 f"{'(默认值)' if is_fallback else '(AI评分)'}"
             )
 
@@ -145,7 +145,7 @@ class QualityJudgeAgent(BaseAgent):
                          "scene_quality", "lighting_quality", "commercial_value"]
             for dim in dimensions:
                 score = scores.get(dim, 0)
-                self._add_evidence(state, f"  {dim}: {score}/5")
+                self._add_evidence(state, f"  {dim}: {score}/10")
 
             # ==================== 4. 判断是否需要重新生成 ====================
             should_regenerate, reason = self.judge.should_regenerate(
