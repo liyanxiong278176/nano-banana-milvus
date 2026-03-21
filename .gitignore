@@ -25,11 +25,11 @@ milvus_fashion.db
 *.db-journal
 
 # 输出
-output/
-*.png
-*.jpg
-!images/*.jpg
-!new_products/*.jpg
+#output/
+#*.png
+#*.jpg
+#!images/*.jpg
+#!new_products/*.jpg
 
 # 环境变量
 .env

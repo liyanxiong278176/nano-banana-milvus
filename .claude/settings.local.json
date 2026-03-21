@@ -6,7 +6,16 @@
       "Bash(docker:*)",
       "Bash(dir D:\\\\agent_learning\\\\nano-banana-milvus\\\\images:*)",
       "Bash(python:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(mv:*)",
+      "Bash(mkdir:*)",
+      "Bash(\"D:/agent_learning/nano-banana-milvus/README.md\":*)",
+      "Bash(rm:*)",
+      "Bash(dir D:\\\\agent_learning\\\\nano-banana-milvus\\\\backend:*)",
+      "Bash(dir D:\\\\agent_learning\\\\nano-banana-milvus\\\\new_products:*)",
+      "Bash(curl:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)"
     ]
   }
 }

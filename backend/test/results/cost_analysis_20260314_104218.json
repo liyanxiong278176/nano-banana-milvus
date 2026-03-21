@@ -1,0 +1,119 @@
+{
+  "timestamp": "20260314_104218",
+  "exchange_rate": 7.2,
+  "traditional_breakdown": {
+    "scenario": "average",
+    "breakdown": {
+      "model": {
+        "amount": 1200,
+        "description": "模特费用"
+      },
+      "photographer": {
+        "amount": 900,
+        "description": "摄影师费用"
+      },
+      "studio_rental": {
+        "amount": 500,
+        "description": "影棚/场地租赁"
+      },
+      "stylist": {
+        "amount": 300,
+        "description": "造型师费用"
+      },
+      "post_processing": {
+        "amount": 200,
+        "description": "后期修图"
+      }
+    },
+    "total_cny": 3100,
+    "total_usd": 430.55555555555554
+  },
+  "ai_breakdown": {
+    "num_products": 5,
+    "per_product_breakdown": {
+      "embedding": {
+        "model": "nvidia/llama-nemotron-embed-vl-1b-v2",
+        "num_images": 1,
+        "tokens_estimate": 0,
+        "cost_usd": 0.0
+      },
+      "style_analysis": {
+        "model": "qwen/qwen3-vl-8b-instruct",
+        "input_tokens": 500,
+        "output_tokens": 200,
+        "cost_usd": 5.5e-05
+      },
+      "image_generation": {
+        "model": "bytedance-seed/seedream-4.5",
+        "num_images": 3,
+        "cost_usd": 0.12
+      }
+    },
+    "per_product_usd": 0.120055,
+    "per_product_cny": 0.8643959999999999,
+    "total_usd": 0.600275,
+    "total_cny": 4.32198
+  },
+  "savings_analysis": {
+    "num_products": 5,
+    "traditional_scenario": "average",
+    "traditional_cost_cny": 15500,
+    "traditional_cost_usd": 2152.777777777778,
+    "ai_cost_cny": 4.32198,
+    "ai_cost_usd": 0.600275,
+    "savings_cny": 15495.67802,
+    "savings_usd": 2152.177502777778,
+    "savings_percent": 99.97211625806452,
+    "cost_ratio": 0.0002788374193548387
+  },
+  "scale_comparison": [
+    {
+      "num_products": 1,
+      "traditional_cost_cny": 3100,
+      "ai_cost_cny": 0.8643959999999999,
+      "savings_cny": 3099.135604,
+      "savings_percent": 99.97211625806452
+    },
+    {
+      "num_products": 10,
+      "traditional_cost_cny": 31000,
+      "ai_cost_cny": 8.64396,
+      "savings_cny": 30991.35604,
+      "savings_percent": 99.97211625806452
+    },
+    {
+      "num_products": 50,
+      "traditional_cost_cny": 155000,
+      "ai_cost_cny": 43.2198,
+      "savings_cny": 154956.7802,
+      "savings_percent": 99.97211625806453
+    },
+    {
+      "num_products": 100,
+      "traditional_cost_cny": 310000,
+      "ai_cost_cny": 86.4396,
+      "savings_cny": 309913.5604,
+      "savings_percent": 99.97211625806453
+    },
+    {
+      "num_products": 500,
+      "traditional_cost_cny": 1550000,
+      "ai_cost_cny": 432.198,
+      "savings_cny": 1549567.802,
+      "savings_percent": 99.97211625806452
+    }
+  ],
+  "api_prices_reference": {
+    "nvidia/llama-nemotron-embed-vl-1b-v2": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "qwen/qwen3-vl-8b-instruct": {
+      "input": 0.05,
+      "output": 0.15
+    },
+    "bytedance-seed/seedream-4.5": {
+      "per_image": 0.04
+    }
+  }
+}

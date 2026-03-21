@@ -1,0 +1,242 @@
+{
+  "total_tests": 8,
+  "successful_tests": 8,
+  "avg_category_match_rate": 1.0,
+  "avg_ndcg": 1.0,
+  "top1_accuracy": 1.0,
+  "top3_recall": 1.0,
+  "detailed_results": [
+    {
+      "new_id": "NEW001",
+      "query_category": "midi_dress",
+      "query_style": "knitted",
+      "success": true,
+      "retrieved_count": 3,
+      "category_match_rate": 1.0,
+      "ndcg": 1.0,
+      "retrieved_products": [
+        {
+          "product_id": "SKU001",
+          "category": "midi_dress",
+          "style": "drawstring",
+          "score": 0.0320020467042923
+        },
+        {
+          "product_id": "SKU001",
+          "category": "midi_dress",
+          "style": "drawstring",
+          "score": 0.03154495730996132
+        },
+        {
+          "product_id": "SKU002",
+          "category": "midi_dress",
+          "style": "floral",
+          "score": 0.03154495730996132
+        }
+      ]
+    },
+    {
+      "new_id": "NEW002",
+      "query_category": "midi_dress",
+      "query_style": "floral",
+      "success": true,
+      "retrieved_count": 3,
+      "category_match_rate": 1.0,
+      "ndcg": 1.0,
+      "retrieved_products": [
+        {
+          "product_id": "SKU002",
+          "category": "midi_dress",
+          "style": "floral",
+          "score": 0.03226646035909653
+        },
+        {
+          "product_id": "SKU002",
+          "category": "midi_dress",
+          "style": "floral",
+          "score": 0.03201844170689583
+        },
+        {
+          "product_id": "SKU002",
+          "category": "midi_dress",
+          "style": "floral",
+          "score": 0.03151364624500275
+        }
+      ]
+    },
+    {
+      "new_id": "NEW003",
+      "query_category": "maxi_dress",
+      "query_style": "elegant",
+      "success": true,
+      "retrieved_count": 3,
+      "category_match_rate": 1.0,
+      "ndcg": 1.0,
+      "retrieved_products": [
+        {
+          "product_id": "SKU004",
+          "category": "maxi_dress",
+          "style": "elegant",
+          "score": 0.0317460335791111
+        },
+        {
+          "product_id": "SKU005",
+          "category": "maxi_dress",
+          "style": "classic",
+          "score": 0.03154495730996132
+        },
+        {
+          "product_id": "SKU004",
+          "category": "maxi_dress",
+          "style": "elegant",
+          "score": 0.03109932318329811
+        }
+      ]
+    },
+    {
+      "new_id": "NEW004",
+      "query_category": "top",
+      "query_style": "ethnic",
+      "success": true,
+      "retrieved_count": 3,
+      "category_match_rate": 1.0,
+      "ndcg": 1.0,
+      "retrieved_products": [
+        {
+          "product_id": "SKU014",
+          "category": "top",
+          "style": "peasant",
+          "score": 0.03125763311982155
+        },
+        {
+          "product_id": "SKU012",
+          "category": "top",
+          "style": "navy",
+          "score": 0.030886195600032806
+        },
+        {
+          "product_id": "SKU015",
+          "category": "top",
+          "style": "blouse",
+          "score": 0.03030303120613098
+        }
+      ]
+    },
+    {
+      "new_id": "NEW005",
+      "query_category": "midi_dress",
+      "query_style": "floral",
+      "success": true,
+      "retrieved_count": 3,
+      "category_match_rate": 1.0,
+      "ndcg": 1.0,
+      "retrieved_products": [
+        {
+          "product_id": "SKU001",
+          "category": "midi_dress",
+          "style": "drawstring",
+          "score": 0.0320020467042923
+        },
+        {
+          "product_id": "SKU001",
+          "category": "midi_dress",
+          "style": "drawstring",
+          "score": 0.03154495730996132
+        },
+        {
+          "product_id": "SKU002",
+          "category": "midi_dress",
+          "style": "floral",
+          "score": 0.03154495730996132
+        }
+      ]
+    },
+    {
+      "new_id": "NEW006",
+      "query_category": "maxi_dress",
+      "query_style": "elegant",
+      "success": true,
+      "retrieved_count": 3,
+      "category_match_rate": 1.0,
+      "ndcg": 1.0,
+      "retrieved_products": [
+        {
+          "product_id": "SKU004",
+          "category": "maxi_dress",
+          "style": "elegant",
+          "score": 0.0317460335791111
+        },
+        {
+          "product_id": "SKU006",
+          "category": "maxi_dress",
+          "style": "boho",
+          "score": 0.03128054738044739
+        },
+        {
+          "product_id": "SKU006",
+          "category": "maxi_dress",
+          "style": "boho",
+          "score": 0.03125
+        }
+      ]
+    },
+    {
+      "new_id": "NEW007",
+      "query_category": "skirt",
+      "query_style": "casual",
+      "success": true,
+      "retrieved_count": 3,
+      "category_match_rate": 1.0,
+      "ndcg": 1.0,
+      "retrieved_products": [
+        {
+          "product_id": "SKU016",
+          "category": "skirt",
+          "style": "blue",
+          "score": 0.0317460335791111
+        },
+        {
+          "product_id": "SKU016",
+          "category": "skirt",
+          "style": "blue",
+          "score": 0.03067915514111519
+        },
+        {
+          "product_id": "SKU018",
+          "category": "skirt",
+          "style": "pink",
+          "score": 0.030621785670518875
+        }
+      ]
+    },
+    {
+      "new_id": "NEW_1773454818_75e446cc",
+      "query_category": "midi_dress",
+      "query_style": "formal",
+      "success": true,
+      "retrieved_count": 3,
+      "category_match_rate": 1.0,
+      "ndcg": 1.0,
+      "retrieved_products": [
+        {
+          "product_id": "SKU002",
+          "category": "midi_dress",
+          "style": "floral",
+          "score": 0.016393441706895828
+        },
+        {
+          "product_id": "SKU001",
+          "category": "midi_dress",
+          "style": "drawstring",
+          "score": 0.016129031777381897
+        },
+        {
+          "product_id": "SKU003",
+          "category": "midi_dress",
+          "style": "boho",
+          "score": 0.01587301678955555
+        }
+      ]
+    }
+  ]
+}

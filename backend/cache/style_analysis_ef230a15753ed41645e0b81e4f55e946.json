@@ -1,0 +1,8 @@
+{
+  "combined_style": "纯黑背景下，模特居中站立，柔光勾勒轮廓，营造高级静谧感。户外绿意盎然，自然光洒落，构图开阔舒展。动态捕捉裙摆飞扬瞬间，强调线条与空间流动，整体氛围优雅浪漫，兼具戏剧张力与生活气息。",
+  "individual_analyses": [
+    "```json\n{\n  \"scene\": {\n    \"background_type\": \"纯色背景\",\n    \"elements\": \"\"\n  },\n  \"lighting\": {\n    \"type\": \"影棚光\",\n    \"direction\": \"侧光\",\n    \"quality\": \"柔和\",\n    \"tone\": \"中性\"\n  },\n  \"composition\": {\n    \"shot_type\": \"全身\",\n    \"angle\": \"平视\",\n    \"method\": \"居中构图\"\n  },\n  \"atmosphere\": {\n    \"keywords\": [\"专业\", \"优雅\", \"简约\", \"高级\"],\n    \"mood\": \"优雅\"\n  },\n  \"summary\": \"纯黑背景下的专业影棚拍摄，柔和侧光突出人物轮廓，整体风格简约高级且优雅。\"\n}\n```",
+    "```json\n{\n  \"scene\": {\n    \"background_type\": \"自然户外\",\n    \"elements\": \"绿植、白色栅栏、白色拱门结构\"\n  },\n  \"lighting\": {\n    \"type\": \"自然光\",\n    \"direction\": \"顺光\",\n    \"quality\": \"柔和\",\n    \"tone\": \"暖色\"\n  },\n  \"composition\": {\n    \"shot_type\": \"全身\",\n    \"angle\": \"平视\",\n    \"method\": \"居中构图\"\n  },\n  \"atmosphere\": {\n    \"keywords\": [\"清新\", \"自然\", \"优雅\", \"宁静\"],\n    \"mood\": \"轻松\"\n  },\n  \"summary\": \"自然柔和光线下的户外清新优雅风格拍摄\"\n}\n```",
+    "```json\n{\n  \"scene\": {\n    \"background_type\": \"自然户外\",\n    \"elements\": \"绿植、石板路、花盆、树木\"\n  },"
+  ]
+}

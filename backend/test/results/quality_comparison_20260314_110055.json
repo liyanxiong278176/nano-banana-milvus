@@ -1,0 +1,57 @@
+{
+  "timestamp": "20260314_110055",
+  "summary": {
+    "total_tests": 1,
+    "successful_tests": 1,
+    "overall_baseline": 4.8,
+    "overall_with_reference": 4,
+    "overall_improvement": -0.7999999999999998,
+    "improvement_percent": -16.666666666666664
+  },
+  "dimension_comparison": {
+    "baseline": {
+      "clothing_accuracy": 5,
+      "pose_naturalness": 4,
+      "scene_quality": 5,
+      "lighting_quality": 5,
+      "commercial_value": 5
+    },
+    "with_reference": {
+      "clothing_accuracy": 4,
+      "pose_naturalness": 3,
+      "scene_quality": 5,
+      "lighting_quality": 4,
+      "commercial_value": 4
+    }
+  },
+  "detailed_results": [
+    {
+      "new_id": "NEW001",
+      "baseline": {
+        "success": true,
+        "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison\\NEW001_baseline.png",
+        "scores": {
+          "clothing_accuracy": 5,
+          "pose_naturalness": 4,
+          "scene_quality": 5,
+          "lighting_quality": 5,
+          "commercial_value": 5
+        },
+        "avg_score": 4.8
+      },
+      "with_reference": {
+        "success": true,
+        "path": "D:\\agent_learning\\nano-banana-milvus\\backend\\test\\results\\quality_comparison\\NEW001_with_reference.png",
+        "scores": {
+          "clothing_accuracy": 4,
+          "pose_naturalness": 3,
+          "scene_quality": 5,
+          "lighting_quality": 4,
+          "commercial_value": 4
+        },
+        "avg_score": 4
+      },
+      "improvement": -0.7999999999999998
+    }
+  ]
+}

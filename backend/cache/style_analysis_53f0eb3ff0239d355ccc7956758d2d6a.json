@@ -1,0 +1,8 @@
+{
+  "combined_style": "纯色简约背景，柔和自然光均匀布光，模特居中或侧身站立，构图简洁突出主体，营造宁静高级的视觉氛围，强调服装廓形与空间感，整体风格干净利落，富有现代艺术感。",
+  "individual_analyses": [
+    "```json\n{\n  \"scene\": {\n    \"background_type\": \"纯色背景\",\n    \"elements\": \"\"\n  },\n  \"lighting\": {\n    \"type\": \"影棚光\",\n    \"direction\": \"顺光\",\n    \"quality\": \"柔和\",\n    \"tone\": \"中性\"\n  },\n  \"composition\": {\n    \"shot_type\": \"全身\",\n    \"angle\": \"平视\",\n    \"method\": \"居中构图\"\n  },\n  \"atmosphere\": {\n    \"keywords\": [\"极简\", \"干净\", \"专业\", \"静物\", \"商品展示\"],\n    \"mood\": \"专业\"\n  },\n  \"summary\": \"纯色背景下的专业静物拍摄，柔和顺光突出商品质感，构图居中简洁明了。\"\n}\n```",
+    "```json\n{\n  \"scene\": {\n    \"background_type\": \"室内场景\",\n    \"elements\": \"纯色墙面与地面，简约无装饰\"\n  },\n  \"lighting\": {\n    \"type\": \"影棚光\",\n    \"direction\": \"侧光\",\n    \"quality\": \"柔和\",\n    \"tone\": \"中性\"\n  },\n  \"composition\": {\n    \"shot_type\": \"全身\",\n    \"angle\": \"平视\",\n    \"method\": \"居中构图\"\n  },\n  \"atmosphere\": {\n    \"keywords\": [\"极简\", \"专业\", \"静谧\", \"高级\"],\n    \"mood\": \"优雅\"\n  },\n  \"summary\": \"极简影棚风格，柔和侧光营造静谧高级感，居中构图突出主体专业感。\"\n}\n```",
+    "```json\n{\n  \"scene\": {\n    \"background_type\": \"自然户外\",\n    \"elements\": \"花田、植被、自然光斑\"\n  },\n  \"lighting\": {\n    \"type\": \"自然光\",\n    \"direction\": \"侧光\",\n    \"quality\": \"柔和\",\n    \"tone\": \"暖色\"\n  },\n  \"composition\": {\n    \"shot_type\": \"全身\",\n    \"angle\": \"平视\",\n    \"method\": \"居中构图\"\n  },\n  \"atmosphere\": {\n    \"keywords\": [\"清新\", \"自然\", \"宁静\", \"梦幻\", \"诗意\"],\n    \"mood\": \"轻松\"\n  },\n  \"summary\": \"自然光线下花田中的宁静清新风格拍摄，柔和侧光营造梦幻诗意氛围。\"\n}\n```"
+  ]
+}
