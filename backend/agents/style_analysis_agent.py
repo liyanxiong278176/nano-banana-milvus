@@ -27,7 +27,14 @@ from .state import PipelineState
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from image_gen import ImageGenerator
+from generation.image_gen import ImageGenerator
+
+# 【v2.2新增】导入提示词工程
+try:
+    from prompts.v2 import get_metrics, record_prompt_execution
+    PROMPTS_V2_AVAILABLE = True
+except ImportError:
+    PROMPTS_V2_AVAILABLE = False
 
 
 class StyleAnalysisAgent(BaseAgent):
@@ -46,16 +53,26 @@ class StyleAnalysisAgent(BaseAgent):
         """
         初始化风格分析Agent
 
+        【v2.2】集成提示词版本管理
+
         Args:
             image_gen: ImageGenerator实例（复用现有模块）
         """
         super().__init__("StyleAnalysisAgent")
         self.image_gen = image_gen
 
+        # 【v2.2新增】设置提示词版本
+        self.set_prompt_version("2.0")
+
     @time_decorator("style_analysis_time")
     def run(self, state: PipelineState) -> PipelineState:
         """
         执行风格分析流程
+
+        【v2.2】集成提示词工程：
+        - 记录提示词版本
+        - 追踪执行时间
+        - 记录缓存命中情况
 
         Args:
             state: 包含ref_images的状态
@@ -63,7 +80,13 @@ class StyleAnalysisAgent(BaseAgent):
         Returns:
             更新后的状态，包含style_prompt
         """
+        import time
+        start_time = time.time()
+
         self._update_status(state, "processing", "StyleAnalysisAgent")
+
+        # 【v2.2新增】记录提示词版本
+        self._log_prompt_version(state)
 
         try:
             # ==================== 1. 验证输入 ====================
@@ -74,7 +97,14 @@ class StyleAnalysisAgent(BaseAgent):
                 # 使用默认风格模板
                 default_prompt = "专业电商宣传照，简洁背景，柔和光线，模特全身展示"
                 state["style_prompt"] = default_prompt
-                self._log_metric(state, "cache_hit", 0)  # 无图片，不算缓存命中
+
+                # 记录执行（无参考图的情况）
+                self._record_prompt_execution(
+                    state,
+                    success=True,
+                    execution_time=time.time() - start_time,
+                    metadata={"cache_hit": False, "ref_count": 0}
+                )
                 return state
 
             self._add_evidence(state, f"开始分析风格: {len(ref_images)}张参考图")
@@ -85,6 +115,8 @@ class StyleAnalysisAgent(BaseAgent):
             )
 
             # ==================== 3. 提取风格提示词 ====================
+            cache_hit = False
+
             if isinstance(style_analysis, dict):
                 style_prompt = style_analysis.get("combined_style", "")
                 individual_analyses = style_analysis.get("individual_analyses", [])
@@ -111,6 +143,13 @@ class StyleAnalysisAgent(BaseAgent):
                 self._log_metric(state, "individual_count", 0)
 
             if not style_prompt:
+                # 记录失败
+                self._record_prompt_execution(
+                    state,
+                    success=False,
+                    execution_time=time.time() - start_time,
+                    error="风格提示词生成失败"
+                )
                 raise ValueError("风格提示词生成失败")
 
             # ==================== 4. 记录风格分析结果 ====================
@@ -125,6 +164,18 @@ class StyleAnalysisAgent(BaseAgent):
             # ==================== 5. 更新状态 ====================
             state["style_prompt"] = style_prompt
 
+            # 【v2.2新增】记录提示词执行成功
+            self._record_prompt_execution(
+                state,
+                success=True,
+                execution_time=time.time() - start_time,
+                metadata={
+                    "cache_hit": cache_hit,
+                    "ref_count": len(ref_images),
+                    "prompt_length": len(style_prompt)
+                }
+            )
+
             return state
 
         except Exception as e:
@@ -132,6 +183,15 @@ class StyleAnalysisAgent(BaseAgent):
             self._add_evidence(state, f"风格分析失败: {e}，使用默认风格模板")
             default_prompt = "专业电商宣传照，简洁背景，柔和光线"
             state["style_prompt"] = default_prompt
+
+            # 【v2.2新增】记录失败
+            self._record_prompt_execution(
+                state,
+                success=False,
+                execution_time=time.time() - start_time,
+                error=str(e)
+            )
+
             return state
 
     def _extract_style_features(self, state: PipelineState, style_prompt: str):

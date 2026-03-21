@@ -3,6 +3,11 @@ Agent基类定义 - BaseAgent
 
 所有具体Agent的父类，定义统一的接口和公共方法。
 
+【v2.2 更新】集成提示词工程：
+- 提示词版本管理
+- 提示词执行追踪
+- 多语言支持
+
 【面试讲解要点】
 1. 模板方法模式：run()是抽象方法，子类实现具体逻辑
 2. _add_evidence和_log_metric是通用能力，所有子类复用
@@ -13,6 +18,20 @@ from typing import Dict, Any, Optional
 from functools import wraps
 import time
 from .state import PipelineState
+
+# ==================== 【v2.2新增】提示词工程导入 ====================
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+try:
+    from prompts.prompts import PromptVersionManager
+    from prompts.v2 import get_metrics, record_prompt_execution
+    from prompts.v3 import PromptLocale
+    PROMPTS_ENGINE_AVAILABLE = True
+except ImportError:
+    print("[BaseAgent] 提示词工程模块不可用，使用基础功能")
+    PROMPTS_ENGINE_AVAILABLE = False
 
 
 def time_decorator(metric_key: str):
@@ -75,6 +94,10 @@ class BaseAgent(ABC):
         """
         self.name = name
         self._step_count = 0  # 内部计数器，用于证据链编号
+
+        # 【v2.2新增】提示词版本追踪
+        self.prompt_version = "2.0"  # 默认提示词版本
+        self.prompt_locale = "zh"   # 默认语言
 
     @abstractmethod
     def run(self, state: PipelineState) -> PipelineState:
@@ -158,10 +181,131 @@ class BaseAgent(ABC):
         state["error_msg"] = error_msg
         state["current_step"] = self.name
         self._add_evidence(state, f"错误: {error_msg}")
+
+        # 【v2.2新增】记录提示词执行失败
+        self._record_prompt_execution(state, success=False, error=error_msg)
+
         return state
 
+    # ==================== 【v2.2新增】提示词工程方法 ====================
+
+    def set_prompt_version(self, version: str):
+        """
+        设置提示词版本
+
+        Args:
+            version: 版本号 (如 "2.0", "2.1")
+        """
+        self.prompt_version = version
+        if PROMPTS_ENGINE_AVAILABLE:
+            versions = PromptVersionManager.get_all_versions()
+            if self.name.lower() in ["qualityjudgeagent", "quality_judge"]:
+                pt = "quality_judge"
+            elif self.name.lower() in ["styleanalysisagent", "style_analysis"]:
+                pt = "style_analysis"
+            elif self.name.lower() in ["hybridretrievalagent", "hybrid_retrieval"]:
+                pt = "retrieval_judge"
+            else:
+                pt = None
+
+            if pt and pt in versions:
+                self.prompt_version = versions[pt]["current"]
+
+    def set_prompt_locale(self, locale: str):
+        """
+        设置提示词语言
+
+        Args:
+            locale: 语言代码 ("zh" 或 "en")
+        """
+        if PROMPTS_ENGINE_AVAILABLE:
+            if locale in PromptLocale.get_supported_locales():
+                self.prompt_locale = locale
+
+    def get_prompt(self, prompt_type: str, key: str = "system") -> str:
+        """
+        获取本地化提示词
+
+        Args:
+            prompt_type: 提示词类型
+            key: 提示词部分
+
+        Returns:
+            本地化的提示词文本
+        """
+        if PROMPTS_ENGINE_AVAILABLE:
+            return PromptLocale.get_prompt(prompt_type, self.prompt_locale, key)
+        return ""
+
+    def _record_prompt_execution(
+        self,
+        state: PipelineState,
+        success: bool,
+        execution_time: float = 0,
+        error: str = "",
+        metadata: Dict[str, Any] = None
+    ):
+        """
+        记录提示词执行（内部方法）
+
+        Args:
+            state: 当前状态
+            success: 是否成功
+            execution_time: 执行时间
+            error: 错误信息
+            metadata: 额外元数据
+        """
+        if not PROMPTS_ENGINE_AVAILABLE:
+            return
+
+        try:
+            # 确定提示词类型
+            if self.name.lower() in ["qualityjudgeagent", "quality_judge"]:
+                pt = "quality_judge"
+            elif self.name.lower() in ["styleanalysisagent", "style_analysis"]:
+                pt = "style_analysis"
+            elif self.name.lower() in ["hybridretrievalagent", "hybrid_retrieval"]:
+                pt = "retrieval_judge"
+            elif self.name.lower() in ["imagegenagent", "image_gen"]:
+                pt = "image_generation"
+            else:
+                return  # 其他类型暂不追踪
+
+            # 获取模型信息
+            model = state.get("model", "qwen/qwen3-vl-8b-instruct")
+
+            # 记录执行
+            record_prompt_execution(
+                prompt_type=pt,
+                prompt_version=self.prompt_version,
+                model=model,
+                input_summary=f"{self.name} on task {state.get('task_id', 'unknown')[:8]}",
+                output_summary=f"success={success}",
+                execution_time=execution_time,
+                success=success,
+                error_message=error,
+                metadata=metadata or {}
+            )
+
+        except Exception as e:
+            # 记录失败不影响主流程
+            print(f"[{self.name}] 记录提示词执行失败: {e}")
+
+    def _log_prompt_version(self, state: PipelineState):
+        """
+        记录提示词版本到证据链
+
+        Args:
+            state: 当前状态
+        """
+        if PROMPTS_ENGINE_AVAILABLE:
+            self._add_evidence(
+                state,
+                f"提示词版本: {self.prompt_version} | 语言: {self.prompt_locale}"
+            )
+
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(name='{self.name}')"
+        return f"{self.__class__.__name__}(name='{self.name}', prompt_v='{self.prompt_version}')"
 
 
 if __name__ == "__main__":

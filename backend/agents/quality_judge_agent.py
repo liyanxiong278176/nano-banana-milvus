@@ -33,7 +33,14 @@ from .state import PipelineState
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from image_gen import ImageQualityJudge
+from generation.image_gen import ImageQualityJudge
+
+# 【v2.2新增】导入提示词工程
+try:
+    from prompts.v2 import build_few_shot_prompt, get_few_shot_examples
+    PROMPTS_V2_AVAILABLE = True
+except ImportError:
+    PROMPTS_V2_AVAILABLE = False
 
 
 class QualityJudgeAgent(BaseAgent):
@@ -52,6 +59,8 @@ class QualityJudgeAgent(BaseAgent):
         """
         初始化质量评估Agent
 
+        【v2.2】集成提示词版本管理
+
         Args:
             model: 评分模型（None则使用config.LLM_MODEL）
             min_score: 最低及格分数
@@ -62,10 +71,18 @@ class QualityJudgeAgent(BaseAgent):
         self.min_score = min_score
         self.max_retry = max_retry
 
+        # 【v2.2新增】设置提示词版本
+        self.set_prompt_version("2.0")
+
     @time_decorator("quality_judge_time")
     def run(self, state: PipelineState) -> PipelineState:
         """
         执行质量评估流程
+
+        【v2.2】集成提示词工程：
+        - 记录提示词版本
+        - 追踪执行时间
+        - 记录成功/失败状态
 
         Args:
             state: 包含generated_images的状态
@@ -73,7 +90,13 @@ class QualityJudgeAgent(BaseAgent):
         Returns:
             更新后的状态，包含quality_scores和should_regenerate
         """
+        import time
+        start_time = time.time()
+
         self._update_status(state, "processing", "QualityJudgeAgent")
+
+        # 【v2.2新增】记录提示词版本
+        self._log_prompt_version(state)
 
         try:
             # ==================== 1. 验证输入 ====================
@@ -82,6 +105,13 @@ class QualityJudgeAgent(BaseAgent):
             ref_images = state.get("ref_images", [])
 
             if not generated_images:
+                # 记录失败
+                self._record_prompt_execution(
+                    state,
+                    success=False,
+                    execution_time=time.time() - start_time,
+                    error="无生成图片"
+                )
                 raise ValueError("生成的图片列表为空，请先执行ImageGenAgent")
 
             self._add_evidence(
@@ -154,6 +184,18 @@ class QualityJudgeAgent(BaseAgent):
             # ==================== 6. 记录指标 ====================
             self._log_metric(state, "best_score", avg_score)
             self._log_metric(state, "is_fallback", 1 if is_fallback else 0)
+
+            # 【v2.2新增】记录提示词执行成功
+            self._record_prompt_execution(
+                state,
+                success=True,
+                execution_time=time.time() - start_time,
+                metadata={
+                    "avg_score": avg_score,
+                    "is_fallback": is_fallback,
+                    "dimensions_count": len(scores)
+                }
+            )
 
             return state
 

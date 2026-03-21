@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from PIL import Image
 from config import PROJECT_ROOT, NEW_PRODUCT_DIR, NEW_PRODUCT_CSV
-from utils import save_image
+from utils.core import save_image
 
 
 def test_workflow_integration():
@@ -57,7 +57,7 @@ def test_workflow_integration():
         return False
 
     try:
-        from workflow import create_workflow, prepare_state_with_components
+        from workflow.core import create_workflow_v2, prepare_state_with_components
         from agents import create_initial_state
         print(f"  ✓ workflow 模块导入成功")
     except ImportError as e:
@@ -95,9 +95,9 @@ def test_workflow_integration():
     print("\n[3/6] 初始化组件...")
 
     try:
-        from embedding import EmbeddingGenerator
-        from retrieval_wrapper import create_retrieval_wrapper
-        from image_gen import ImageGenerator
+        from vectorization.embedding import EmbeddingGenerator
+        from retrieval.wrapper import create_retrieval_wrapper
+        from generation.image_gen import ImageGenerator
 
         embed_gen = EmbeddingGenerator()
 
@@ -128,10 +128,10 @@ def test_workflow_integration():
         return False
 
     # ==================== 4. 创建工作流 ====================
-    print("\n[4/6] 创建工作流...")
+    print("\n[4/6] 创建工作流（简化版 v2）...")
 
     try:
-        app = create_workflow(
+        app = create_workflow_v2(
             embed_gen=embed_gen,
             retriever=retriever,
             image_gen=image_gen,

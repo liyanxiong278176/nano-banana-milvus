@@ -1,0 +1,108 @@
+[
+  {
+    "feedback_id": "fb_4f672aef4054",
+    "task_id": "task_001",
+    "product_id": "NEW_001",
+    "timestamp": "2026-03-21T14:36:36.705189",
+    "feedback_type": "quality",
+    "rating": 5,
+    "prompt_type": "quality_judge",
+    "prompt_version": "2.0",
+    "model": "qwen/qwen3-vl-8b-instruct",
+    "metadata": {
+      "comment": "优秀结果"
+    }
+  },
+  {
+    "feedback_id": "fb_c0d87560babb",
+    "task_id": "task_002",
+    "product_id": "NEW_002",
+    "timestamp": "2026-03-21T14:36:36.705550",
+    "feedback_type": "quality",
+    "rating": 4,
+    "prompt_type": "quality_judge",
+    "prompt_version": "2.0",
+    "model": "qwen/qwen3-vl-8b-instruct",
+    "metadata": {
+      "comment": "良好"
+    }
+  },
+  {
+    "feedback_id": "fb_ced88742f735",
+    "task_id": "task_003",
+    "product_id": "NEW_003",
+    "timestamp": "2026-03-21T14:36:36.705835",
+    "feedback_type": "quality",
+    "rating": 3,
+    "prompt_type": "quality_judge",
+    "prompt_version": "2.0",
+    "model": "qwen/qwen3-vl-8b-instruct",
+    "metadata": {
+      "comment": "一般"
+    }
+  },
+  {
+    "feedback_id": "fb_1e06d5f527e7",
+    "task_id": "task_004",
+    "product_id": "NEW_004",
+    "timestamp": "2026-03-21T14:36:36.706097",
+    "feedback_type": "quality",
+    "rating": 2,
+    "prompt_type": "quality_judge",
+    "prompt_version": "2.0",
+    "model": "qwen/qwen3-vl-8b-instruct",
+    "metadata": {
+      "comment": "服装不太准"
+    }
+  },
+  {
+    "feedback_id": "fb_dd1536c60d0e",
+    "task_id": "task_005",
+    "product_id": "NEW_005",
+    "timestamp": "2026-03-21T14:36:36.706326",
+    "feedback_type": "quality",
+    "rating": 1,
+    "prompt_type": "quality_judge",
+    "prompt_version": "2.0",
+    "model": "qwen/qwen3-vl-8b-instruct",
+    "metadata": {
+      "comment": "完全不符"
+    }
+  },
+  {
+    "feedback_id": "fb_39217858afbf",
+    "task_id": "task_v1_001",
+    "product_id": "NEW_101",
+    "timestamp": "2026-03-21T14:36:36.706733",
+    "feedback_type": "quality",
+    "rating": 5,
+    "prompt_type": "quality_judge",
+    "prompt_version": "1.0",
+    "model": "qwen/qwen3-vl-8b-instruct",
+    "metadata": {}
+  },
+  {
+    "feedback_id": "fb_622c9cca7c47",
+    "task_id": "task_v1_002",
+    "product_id": "NEW_102",
+    "timestamp": "2026-03-21T14:36:36.707026",
+    "feedback_type": "quality",
+    "rating": 4,
+    "prompt_type": "quality_judge",
+    "prompt_version": "1.0",
+    "model": "qwen/qwen3-vl-8b-instruct",
+    "metadata": {}
+  },
+  {
+    "feedback_id": "fb_ce3a139dacdb",
+    "task_id": "task_v1_003",
+    "product_id": "NEW_103",
+    "timestamp": "2026-03-21T14:36:36.707284",
+    "feedback_type": "quality",
+    "rating": 3,
+    "prompt_type": "quality_judge",
+    "prompt_version": "1.0",
+    "model": "qwen/qwen3-vl-8b-instruct",
+    "metadata": {}
+  }
+]

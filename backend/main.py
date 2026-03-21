@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import List, Dict
 from PIL import Image
 
-from config import OUTPUT_DIR, TOP_K_RETRIEVAL, COLLECTION_NAME
-from embedding import EmbeddingGenerator
-from retrieval import BestsellerRetriever
-from retrieval_wrapper import RetrievalWrapper, create_retrieval_wrapper
-from image_gen import ImageGenerator
-from utils import save_image
+from config import OUTPUT_DIR, TOP_K_RETRIEVAL, COLLECTION_NAME, USE_BM25, BM25_K1, BM25_B
+from vectorization.embedding import EmbeddingGenerator
+from retrieval.retrieval import BestsellerRetriever
+from retrieval.wrapper import RetrievalWrapper, create_retrieval_wrapper
+from generation.image_gen import ImageGenerator
+from utils.core import save_image
 
 
 class FashionImagePipeline:
@@ -27,7 +27,7 @@ class FashionImagePipeline:
 
         # 使用检索包装器（Milvus 向量检索 + 循环检索状态机）
         self.retriever = create_retrieval_wrapper()
-        self.embed_gen = EmbeddingGenerator()
+        self.embed_gen = EmbeddingGenerator(use_bm25=USE_BM25)
         self.image_gen = ImageGenerator()
         self.tfidf = None
 

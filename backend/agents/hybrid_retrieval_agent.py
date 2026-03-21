@@ -39,11 +39,18 @@ from .state import PipelineState
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from retrieval_wrapper import RetrievalWrapper
+from retrieval.wrapper import RetrievalWrapper
 from config import (
     QUERY_REWRITE_SALES_LOW,
     MAX_RETRIEVAL_ROUNDS
 )
+
+# 【v2.2新增】导入提示词工程
+try:
+    from prompts.v2 import get_metrics, record_prompt_execution
+    PROMPTS_V2_AVAILABLE = True
+except ImportError:
+    PROMPTS_V2_AVAILABLE = False
 
 
 class HybridRetrievalAgent(BaseAgent):
@@ -62,16 +69,26 @@ class HybridRetrievalAgent(BaseAgent):
         """
         初始化检索Agent
 
+        【v2.2】集成提示词版本管理
+
         Args:
             retriever: RetrievalWrapper实例（已初始化）
         """
         super().__init__("HybridRetrievalAgent")
         self.retriever = retriever
 
+        # 【v2.2新增】设置提示词版本
+        self.set_prompt_version("2.0")
+
     @time_decorator("retrieval_time")
     def run(self, state: PipelineState) -> PipelineState:
         """
         执行检索流程
+
+        【v2.2】集成提示词工程：
+        - 记录提示词版本
+        - 追踪执行时间
+        - 记录检索结果数量
 
         Args:
             state: 包含query_dense, query_sparse和过滤条件的状态
@@ -79,7 +96,13 @@ class HybridRetrievalAgent(BaseAgent):
         Returns:
             更新后的状态，包含retrieved_results和ref_images
         """
+        import time
+        start_time = time.time()
+
         self._update_status(state, "processing", "HybridRetrievalAgent")
+
+        # 【v2.2新增】记录提示词版本
+        self._log_prompt_version(state)
 
         try:
             # ==================== 1. 验证输入 ====================
@@ -164,9 +187,28 @@ class HybridRetrievalAgent(BaseAgent):
             # ==================== 5. 记录指标 ====================
             self._log_metric(state, "result_count", result_count)
 
+            # 【v2.2新增】记录提示词执行成功
+            self._record_prompt_execution(
+                state,
+                success=True,
+                execution_time=time.time() - start_time,
+                metadata={
+                    "result_count": result_count,
+                    "category": category,
+                    "style": style
+                }
+            )
+
             return state
 
         except Exception as e:
+            # 【v2.2新增】记录失败
+            self._record_prompt_execution(
+                state,
+                success=False,
+                execution_time=time.time() - start_time,
+                error=str(e)
+            )
             return self._handle_error(state, f"检索失败: {str(e)}")
 
 

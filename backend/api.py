@@ -5,6 +5,7 @@ import asyncio
 import csv
 import io
 import json
+import logging
 import os
 import time
 import uuid
@@ -24,30 +25,42 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 # 修复 Windows 控制台编码问题（统一使用工具模块）
-from console_utils import fix_console_encoding
+from utils.console import fix_console_encoding
 fix_console_encoding()
+
+# 配置日志系统（输出到 log_config 目录）
+from log_config import setup_logging, get_logger
+setup_logging("api", level=logging.INFO)
+app_logger = get_logger("api")
+app_logger.info("=" * 60)
+app_logger.info("API 服务启动")
+app_logger.info("=" * 60)
 
 from config import (
     OPENROUTER_API_KEY, MILVUS_URI, COLLECTION_NAME,
     IMAGE_DIR, NEW_PRODUCT_DIR, OUTPUT_DIR, NEW_PRODUCT_CSV,
-    DEFAULT_ASPECT_RATIO, DEFAULT_IMAGE_SIZE
+    DEFAULT_ASPECT_RATIO, DEFAULT_IMAGE_SIZE,
+    USE_BM25, BM25_K1, BM25_B
 )
-from embedding import EmbeddingGenerator
-from retrieval import BestsellerRetriever
-from retrieval_wrapper import RetrievalWrapper, create_retrieval_wrapper
-from image_gen import ImageGenerator
-from utils import save_image
+from vectorization.embedding import EmbeddingGenerator
+from retrieval.retrieval import BestsellerRetriever
+from retrieval.wrapper import RetrievalWrapper, create_retrieval_wrapper
+from generation.image_gen import ImageGenerator
+from utils.core import save_image
 
 # ==================== 【新增】LangGraph 工作流导入 ====================
 # 导入工作流相关模块
 try:
-    from workflow import create_workflow, prepare_state_with_components
+    from workflow.core import create_workflow_v2, prepare_state_with_components
     from agents import create_initial_state
     WORKFLOW_AVAILABLE = True
 except ImportError as e:
     print(f"警告: LangGraph 工作流模块导入失败: {e}")
     print("将使用原有线性流程")
     WORKFLOW_AVAILABLE = False
+
+# ==================== 【新增】任务管理器导入 ====================
+from task import TaskManager, get_task_manager, TaskStatus
 
 
 # ==================== Pydantic 模型 ====================
@@ -104,8 +117,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 任务存储
-tasks = {}
+# 任务管理器（替代原来的 tasks = {} 字典）
+# 使用 get_task_manager() 获取全局单例
+task_manager: TaskManager = None
 
 # 流水线实例（延迟初始化）
 pipeline_components = None
@@ -115,16 +129,21 @@ pipeline_components = None
 
 def init_pipeline():
     """初始化流水线组件"""
-    global pipeline_components
+    global pipeline_components, task_manager
 
     if pipeline_components is not None:
         return pipeline_components
 
     print("初始化流水线组件...")
 
+    # 初始化任务管理器
+    if task_manager is None:
+        task_manager = get_task_manager()
+        print(f"任务管理器已初始化 (最大并发: {task_manager.max_concurrent})")
+
     # 使用检索包装器（Milvus 向量检索 + 循环检索状态机）
     retriever = create_retrieval_wrapper()
-    embed_gen = EmbeddingGenerator()
+    embed_gen = EmbeddingGenerator(use_bm25=USE_BM25)
     image_gen = ImageGenerator()
     tfidf = None
 
@@ -135,9 +154,13 @@ def init_pipeline():
         stats = milvus_retriever.get_collection_stats()
         if stats.get('row_count', 0) > 0:
             print(f"数据库已就绪，包含 {stats['row_count']} 条记录")
-            # 加载 TF-IDF
+            # 加载向量化器 (TF-IDF 或 BM25)
             products, _ = embed_gen.load_products()
-            tfidf = embed_gen.build_tfidf_vectorizer(products)
+            if USE_BM25:
+                vectorizer = embed_gen.build_bm25_vectorizer(products, k1=BM25_K1, b=BM25_B)
+            else:
+                vectorizer = embed_gen.build_tfidf_vectorizer(products)
+            tfidf = vectorizer  # 保持向后兼容
 
     pipeline_components = {
         'retriever': retriever,
@@ -201,6 +224,79 @@ def save_to_csv(product_id: str, category: str, style: str, season: str, scene_h
 
 # ==================== 【新增】LangGraph 工作流版本 ====================
 
+def update_task_status(task_id: str, status: str, progress: float = None, error: str = None, result: dict = None):
+    """
+    更新任务状态的辅助函数（使用 TaskManager）
+
+    Args:
+        task_id: 任务ID
+        status: 状态 (pending, processing, completed, failed)
+        progress: 进度 (0-1)
+        error: 错误信息
+        result: 结果数据
+    """
+    global task_manager, app_logger
+    if task_manager is None:
+        app_logger.warning(f"[任务状态] TaskManager 未初始化，跳过更新 | task_id={task_id}")
+        return
+
+    record = task_manager.get_task(task_id)
+    if not record:
+        app_logger.warning(f"[任务状态] 任务不存在，跳过更新 | task_id={task_id}")
+        return
+
+    # 更新状态
+    from task import TaskStatus
+    status_map = {
+        'pending': TaskStatus.PENDING,
+        'processing': TaskStatus.RUNNING,
+        'queued': TaskStatus.QUEUED,
+        'completed': TaskStatus.COMPLETED,
+        'failed': TaskStatus.FAILED
+    }
+
+    status_cn_map = {
+        'pending': '等待中',
+        'processing': '处理中',
+        'queued': '排队中',
+        'completed': '已完成',
+        'failed': '失败'
+    }
+
+    if status in status_map:
+        new_status = status_map[status]
+        old_status = record.status
+        if new_status == TaskStatus.RUNNING and old_status != TaskStatus.RUNNING:
+            record.mark_running()
+            app_logger.info(f"[任务状态] 状态更新 | task_id={task_id}, {old_status.value} → {status_cn_map[status]}")
+        elif new_status == TaskStatus.COMPLETED:
+            record.mark_completed(result)
+            app_logger.info(f"[任务状态] 状态更新 | task_id={task_id}, {old_status.value} → 已完成 | 耗时={record.duration_seconds:.2f}秒")
+        elif new_status == TaskStatus.FAILED:
+            record.mark_failed(error or 'Unknown error')
+            app_logger.error(f"[任务状态] 状态更新 | task_id={task_id}, {old_status.value} → 失败 | 错误={error}")
+        elif new_status == TaskStatus.QUEUED:
+            record.mark_queued()
+            app_logger.info(f"[任务状态] 状态更新 | task_id={task_id}, {old_status.value} → 排队中")
+
+    # 更新进度
+    if progress is not None:
+        record.update_progress(
+            step=record.progress.current_step or "processing",
+            percent=int(progress * 100),
+            message=record.progress.message or ""
+        )
+        app_logger.info(f"[任务进度] task_id={task_id}, 进度={int(progress*100)}%")
+
+    # 更新错误信息
+    if error and status != 'failed':  # 如果已经mark_failed则不重复设置
+        record.error = error
+
+    # 更新结果
+    if result and status != 'completed':  # 如果已经mark_completed则不重复设置
+        record.result = result
+
+
 def process_image_task_with_workflow(
     task_id: str,
     file_bytes: bytes,
@@ -225,21 +321,26 @@ def process_image_task_with_workflow(
         judge_model: 质量评估模型
     """
     try:
+        app_logger.info("=" * 60)
+        app_logger.info("LangGraph 工作流开始 | Task ID: %s", task_id[:8])
+        app_logger.info("参数: category=%s, style=%s, season=%s", category, style, season)
+        app_logger.info("=" * 60)
+
         print("\n" + "=" * 60)
         print("  LangGraph Multi-Agent Workflow")
         print("=" * 60)
         print(f"  Task ID: {task_id[:8]}...")
         print("=" * 60)
 
-        tasks[task_id]['status'] = 'processing'
-        tasks[task_id]['progress'] = 0.05
+        update_task_status(task_id, 'processing', 0.05)
 
         # ==================== 1. 初始化组件 ====================
+        app_logger.info("[工作流] [1/7] 初始化工作流组件...")
         print("\n[1/7] 初始化工作流组件...")
         components = ensure_database()
 
-        # 创建工作流实例
-        app = create_workflow(
+        # 创建工作流实例（使用简化版 v2）
+        workflow_app = create_workflow_v2(
             embed_gen=components['embed_gen'],
             retriever=components['retriever'],
             image_gen=components['image_gen'],
@@ -247,9 +348,10 @@ def process_image_task_with_workflow(
             judge_model=judge_model or None
         )
 
-        tasks[task_id]['progress'] = 0.1
+        update_task_status(task_id, 'processing', 0.1)
 
         # ==================== 2. 创建初始状态 ====================
+        app_logger.info("[工作流] [2/7] 创建工作流状态...")
         print("[2/7] 创建工作流状态...")
         state = create_initial_state(
             task_id=task_id,
@@ -271,7 +373,7 @@ def process_image_task_with_workflow(
             judge_model=judge_model or None
         )
 
-        tasks[task_id]['progress'] = 0.15
+        update_task_status(task_id, 'processing', 0.15)
 
         # ==================== 3. 定义进度映射 ====================
         step_progress_map = {
@@ -285,20 +387,22 @@ def process_image_task_with_workflow(
         }
 
         # ==================== 4. 执行工作流（使用stream模式获取实时进度）====================
+        app_logger.info("[工作流] [3/7] 执行工作流...")
         print("[3/7] 执行工作流...")
         print("      流程: Upload → Embedding → Retrieval → Style → ImageGen → Quality → Result")
 
         final_state = None
-        for chunk in app.stream(state):
+        for chunk in workflow_app.stream(state):
             # chunk 是节点名称到状态更新的映射
             for node_name, node_state in chunk.items():
                 if node_name in step_progress_map:
-                    tasks[task_id]['progress'] = step_progress_map[node_name]
-                    print(f"      [{node_name}] 完成 - 进度: {step_progress_map[node_name]*100:.0f}%")
+                    update_task_status(task_id, 'processing', step_progress_map[node_name])
+                    progress_pct = step_progress_map[node_name]*100
+                    app_logger.info("[工作流] [%s] 完成 - 进度: %.0f%%", node_name, progress_pct)
+                    print(f"      [{node_name}] 完成 - 进度: {progress_pct:.0f}%")
                 # 检查是否有错误
                 if isinstance(node_state, dict) and node_state.get("status") == "failed":
-                    tasks[task_id]['status'] = 'failed'
-                    tasks[task_id]['error'] = node_state.get('error_msg', '未知错误')
+                    update_task_status(task_id, 'failed', error=node_state.get('error_msg', '未知错误'))
                     raise Exception(node_state.get('error_msg', '工作流执行失败'))
                 # 保存最终状态
                 if isinstance(node_state, dict):
@@ -308,20 +412,25 @@ def process_image_task_with_workflow(
         if final_state is None:
             final_state = state
 
-        tasks[task_id]['progress'] = 0.95
+        update_task_status(task_id, 'processing', 0.95)
 
         # ==================== 5. 提取最终结果 ====================
+        app_logger.info("[工作流] [4/7] 提取最终结果...")
         print("\n[4/7] 提取最终结果...")
         final_result = final_state.get("final_result", {})
 
         if not final_result:
             raise Exception("工作流执行失败：未生成最终结果")
 
+        # 记录指标
+        metrics = final_result.get('metrics', {})
+        app_logger.info("[工作流] 指标: 总耗时=%.2f秒, 检索耗时=%.2f秒, 生成耗时=%.2f秒",
+                       metrics.get('total_time', 0), metrics.get('retrieval_time', 0), metrics.get('gen_time', 0))
+
         # ==================== 6. 更新任务结果 ====================
+        app_logger.info("[工作流] [5/7] 更新任务状态...")
         print("[5/7] 更新任务状态...")
-        tasks[task_id]['status'] = 'completed'
-        tasks[task_id]['progress'] = 1.0
-        tasks[task_id]['result'] = final_result
+        update_task_status(task_id, 'completed', 1.0, result=final_result)
 
         # ==================== 7. 打印证据链（调试用）====================
         print("\n[6/7] 证据链追踪:")
@@ -331,7 +440,6 @@ def process_image_task_with_workflow(
 
         # 打印指标埋点
         print("\n[7/7] 指标埋点:")
-        metrics = final_result.get('metrics', {})
 
         # 指标名称中文映射
         metric_name_map = {
@@ -368,10 +476,17 @@ def process_image_task_with_workflow(
         print("  Task Completed!")
         print("=" * 60 + "\n")
 
+        app_logger.info("=" * 60)
+        app_logger.info("LangGraph 工作流完成 | Task ID: %s", task_id[:8])
+        app_logger.info("=" * 60)
+
     except Exception as e:
-        tasks[task_id]['status'] = 'failed'
         error_msg = str(e)
-        tasks[task_id]['error'] = error_msg
+        update_task_status(task_id, 'failed', error=error_msg)
+        app_logger.error("=" * 60)
+        app_logger.error("工作流任务失败 | Task ID: %s, 错误: %s", task_id, error_msg)
+        app_logger.error("=" * 60)
+
         print(f"\n{'='*60}")
         print(f"  工作流任务 {task_id} 失败!")
         print(f"{'='*60}")
@@ -407,13 +522,12 @@ def process_image_task(
         print(f"  Product ID: {product_id}")
         print("=" * 60)
 
-        tasks[task_id]['status'] = 'processing'
-        tasks[task_id]['progress'] = 0.1
+        update_task_status(task_id, 'processing', 0.1)
 
         # 初始化流水线
         print("\n[1/6] 初始化流水线组件...")
         components = ensure_database()
-        tasks[task_id]['progress'] = 0.15
+        update_task_status(task_id, 'processing', 0.15)
 
         # 加载新品图片
         print("[2/6] 加载新品图片...")
@@ -421,10 +535,10 @@ def process_image_task(
         if not img_path.exists():
             raise FileNotFoundError(f"图片不存在: {img_path}")
 
-        from utils import load_image
+        from utils.core import load_image
         new_img = load_image(str(img_path))
         print(f"      [OK] Image loaded: {new_img.size[0]}x{new_img.size[1]}")
-        tasks[task_id]['progress'] = 0.25
+        update_task_status(task_id, 'processing', 0.25)
 
         # 构建新品数据
         new_product = {
@@ -444,7 +558,7 @@ def process_image_task(
         )
         print(f"      [OK] Dense vector: {len(query_dense)} dim")
         print(f"      [OK] Sparse vector: {len(query_sparse)} non-zero entries")
-        tasks[task_id]['progress'] = 0.35
+        update_task_status(task_id, 'processing', 0.35)
 
         # 检索相似爆款（循环检索状态机）
         print("\n[4/6] 检索相似爆款...")
@@ -462,7 +576,7 @@ def process_image_task(
             query_scene_hint=scene_hint # 用于质量评估
         )
 
-        tasks[task_id]['progress'] = 0.55
+        update_task_status(task_id, 'processing', 0.55)
 
         if not retrieved:
             raise Exception("未找到相似爆款")
@@ -470,7 +584,7 @@ def process_image_task(
         # 提取参考图片
         ref_images = [r["image"] for r in retrieved if r["image"]]
         print(f"\n      [OK] Retrieval complete: {len(retrieved)} reference products")
-        tasks[task_id]['progress'] = 0.6
+        update_task_status(task_id, 'processing', 0.6)
 
         # 根据是否启用质量评估选择不同的处理方式
         judge_model_param = judge_model if judge_model else None
@@ -506,7 +620,7 @@ def process_image_task(
             all_scores = []
             individual_analyses = []
 
-        tasks[task_id]['progress'] = 0.8
+        update_task_status(task_id, 'processing', 0.8)
 
         if not generated:
             raise Exception("图片生成失败")
@@ -542,18 +656,8 @@ def process_image_task(
             with open(output_dir / f"{product_id}_quality_scores.json", "w", encoding="utf-8") as f:
                 json.dump(quality_scores, f, ensure_ascii=False, indent=2)
 
-        tasks[task_id]['progress'] = 1.0
-        tasks[task_id]['status'] = 'completed'
-
-        # 完成日志
-        print(f"\n      [OK] Generated images: {len(generated)}")
-        print(f"      [OK] Saved reference images: {len(retrieved)}")
-        print(f"      [OK] Output directory: {output_dir}")
-
-        print("\n" + "=" * 60)
-        print("  Task Completed!")
-        print("=" * 60 + "\n")
-        tasks[task_id]['result'] = {
+        # 准备结果数据
+        result_data = {
             'product_id': product_id,
             'category': category,
             'style': style,
@@ -577,9 +681,19 @@ def process_image_task(
             'quality_enabled': enable_quality_check
         }
 
+        # 完成日志
+        print(f"\n      [OK] Generated images: {len(generated)}")
+        print(f"      [OK] Saved reference images: {len(retrieved)}")
+        print(f"      [OK] Output directory: {output_dir}")
+
+        print("\n" + "=" * 60)
+        print("  Task Completed!")
+        print("=" * 60 + "\n")
+
+        update_task_status(task_id, 'completed', 1.0, result=result_data)
+
     except Exception as e:
-        tasks[task_id]['status'] = 'failed'
-        tasks[task_id]['error'] = str(e)
+        update_task_status(task_id, 'failed', error=str(e))
         print(f"任务 {task_id} 失败: {e}")
 
 
@@ -638,20 +752,24 @@ async def upload_and_generate(
 
     # 生成唯一 ID
     product_id = f"NEW_{int(time.time())}_{uuid.uuid4().hex[:8]}"
-    task_id = str(uuid.uuid4())
 
     try:
         # 读取上传的图片字节流
         contents = await file.read()
 
-        # 创建任务
-        tasks[task_id] = {
-            'task_id': task_id,
-            'product_id': product_id,
-            'status': 'pending',
-            'progress': 0.0,
-            'created_at': time.time()
-        }
+        # 使用 TaskManager 注册任务
+        task_id = task_manager.register_task(
+            file_bytes=contents,
+            file_name=file.filename or f"{product_id}.jpg",
+            category=category,
+            style=style,
+            season=season,
+            scene_hint=scene_hint,
+            enable_quality_check=enable_quality_check,
+            judge_model=judge_model
+        )
+        # 保存 product_id 到任务记录的 metadata 中
+        task_manager.get_task(task_id).metadata['product_id'] = product_id
 
         # ==================== 【新增】选择工作流模式 ====================
         if use_workflow and WORKFLOW_AVAILABLE:
@@ -706,16 +824,20 @@ async def upload_and_generate(
 @app.get("/api/tasks/{task_id}", response_model=TaskStatusResponse, tags=["任务"])
 async def get_task_status(task_id: str):
     """获取任务状态"""
-    if task_id not in tasks:
+    task_dict = task_manager.get_task_status(task_id)
+    if not task_dict:
         raise HTTPException(status_code=404, detail="任务不存在")
 
-    task = tasks[task_id]
+    # 将 TaskManager 的状态映射到 API 响应格式
+    progress_info = task_dict.get('progress', {})
+    progress_percent = progress_info.get('percent', 0) / 100.0 if progress_info.get('percent') else 0.0
+
     return TaskStatusResponse(
         task_id=task_id,
-        status=task['status'],
-        progress=task.get('progress', 0.0),
-        result=task.get('result'),
-        error=task.get('error')
+        status=task_dict.get('status', 'pending'),
+        progress=progress_percent,
+        result=task_dict.get('result'),
+        error=task_dict.get('error')
     )
 
 

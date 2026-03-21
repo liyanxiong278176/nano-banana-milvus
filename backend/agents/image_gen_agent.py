@@ -28,8 +28,15 @@ from .state import PipelineState
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from image_gen import ImageGenerator
+from generation.image_gen import ImageGenerator
 from config import DEFAULT_ASPECT_RATIO, DEFAULT_IMAGE_SIZE
+
+# 【v2.2新增】导入提示词工程
+try:
+    from prompts.v2 import get_metrics, record_prompt_execution
+    PROMPTS_V2_AVAILABLE = True
+except ImportError:
+    PROMPTS_V2_AVAILABLE = False
 
 
 class ImageGenAgent(BaseAgent):
@@ -48,16 +55,26 @@ class ImageGenAgent(BaseAgent):
         """
         初始化生图Agent
 
+        【v2.2】集成提示词版本管理
+
         Args:
             image_gen: ImageGenerator实例（复用现有模块）
         """
         super().__init__("ImageGenAgent")
         self.image_gen = image_gen
 
+        # 【v2.2新增】设置提示词版本
+        self.set_prompt_version("2.0")
+
     @time_decorator("image_gen_time")
     def run(self, state: PipelineState) -> PipelineState:
         """
         执行图像生成流程
+
+        【v2.2】集成提示词工程：
+        - 记录提示词版本
+        - 追踪执行时间
+        - 记录生成结果
 
         Args:
             state: 包含new_image, style_prompt等的状态
@@ -65,7 +82,13 @@ class ImageGenAgent(BaseAgent):
         Returns:
             更新后的状态，包含generated_images
         """
+        import time
+        start_time = time.time()
+
         self._update_status(state, "processing", "ImageGenAgent")
+
+        # 【v2.2新增】记录提示词版本
+        self._log_prompt_version(state)
 
         try:
             # ==================== 1. 验证输入 ====================
@@ -131,9 +154,28 @@ class ImageGenAgent(BaseAgent):
             if is_retry:
                 self._log_metric(state, "is_retry", 1)
 
+            # 【v2.2新增】记录提示词执行成功
+            self._record_prompt_execution(
+                state,
+                success=True,
+                execution_time=time.time() - start_time,
+                metadata={
+                    "generated_count": generated_count,
+                    "is_retry": is_retry,
+                    "image_size": f"{img_size[0]}x{img_size[1]}"
+                }
+            )
+
             return state
 
         except Exception as e:
+            # 【v2.2新增】记录失败
+            self._record_prompt_execution(
+                state,
+                success=False,
+                execution_time=time.time() - start_time,
+                error=str(e)
+            )
             return self._handle_error(state, f"图像生成失败: {str(e)}")
 
 

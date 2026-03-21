@@ -34,6 +34,13 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import NEW_PRODUCT_DIR, NEW_PRODUCT_CSV
 
+# 【v2.2新增】导入提示词工程
+try:
+    from prompts.v2 import get_metrics, record_prompt_execution
+    PROMPTS_V2_AVAILABLE = True
+except ImportError:
+    PROMPTS_V2_AVAILABLE = False
+
 
 class UploadAgent(BaseAgent):
     """
@@ -47,15 +54,26 @@ class UploadAgent(BaseAgent):
     """
 
     def __init__(self):
-        """初始化上传Agent"""
+        """
+        初始化上传Agent
+
+        【v2.2】集成提示词版本管理
+        """
         super().__init__("UploadAgent")
         # 确保目录存在
         NEW_PRODUCT_DIR.mkdir(exist_ok=True)
+
+        # 【v2.2新增】设置提示词版本
+        self.set_prompt_version("2.0")
 
     @time_decorator("upload_time")
     def run(self, state: PipelineState) -> PipelineState:
         """
         执行上传解析流程
+
+        【v2.2】集成提示词工程：
+        - 记录提示词版本
+        - 追踪执行时间
 
         Args:
             state: 包含file_bytes等上传数据的状态
@@ -63,7 +81,13 @@ class UploadAgent(BaseAgent):
         Returns:
             更新后的状态，包含product_id和new_image
         """
+        import time
+        start_time = time.time()
+
         self._update_status(state, "processing", "UploadAgent")
+
+        # 【v2.2新增】记录提示词版本
+        self._log_prompt_version(state)
 
         try:
             # ==================== 1. 文件验证 ====================
@@ -117,9 +141,27 @@ class UploadAgent(BaseAgent):
             self._log_metric(state, "image_width", img.size[0])
             self._log_metric(state, "image_height", img.size[1])
 
+            # 【v2.2新增】记录提示词执行成功
+            self._record_prompt_execution(
+                state,
+                success=True,
+                execution_time=time.time() - start_time,
+                metadata={
+                    "file_size_mb": round(file_size_mb, 2),
+                    "image_format": img_format
+                }
+            )
+
             return state
 
         except Exception as e:
+            # 【v2.2新增】记录失败
+            self._record_prompt_execution(
+                state,
+                success=False,
+                execution_time=time.time() - start_time,
+                error=str(e)
+            )
             return self._handle_error(state, f"上传处理失败: {str(e)}")
 
     def _save_to_csv(

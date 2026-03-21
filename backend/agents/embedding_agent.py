@@ -28,7 +28,14 @@ from .state import PipelineState
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from embedding import EmbeddingGenerator
+from vectorization.embedding import EmbeddingGenerator
+
+# 【v2.2新增】导入提示词工程
+try:
+    from prompts.v2 import get_metrics, record_prompt_execution
+    PROMPTS_V2_AVAILABLE = True
+except ImportError:
+    PROMPTS_V2_AVAILABLE = False
 
 
 class EmbeddingAgent(BaseAgent):
@@ -46,18 +53,27 @@ class EmbeddingAgent(BaseAgent):
         """
         初始化向量编码Agent
 
+        【v2.2】集成提示词版本管理
+
         Args:
-            embed_gen: EmbeddingGenerator实例（复用现有模块）
+            embed_gen: EmbeddingGenerator实例��复用现有模块）
             tfidf_vectorizer: TF-IDF向量化器（已训练）
         """
         super().__init__("EmbeddingAgent")
         self.embed_gen = embed_gen
         self.tfidf_vectorizer = tfidf_vectorizer
 
+        # 【v2.2新增】设置提示词版本
+        self.set_prompt_version("2.0")
+
     @time_decorator("embedding_time")
     def run(self, state: PipelineState) -> PipelineState:
         """
         执行向量编码流程
+
+        【v2.2】集成提示词工程：
+        - 记录提示词版本
+        - 追踪执行时间
 
         Args:
             state: 包含new_image和元数据的状态
@@ -65,7 +81,13 @@ class EmbeddingAgent(BaseAgent):
         Returns:
             更新后的状态，包含query_dense和query_sparse
         """
+        import time
+        start_time = time.time()
+
         self._update_status(state, "processing", "EmbeddingAgent")
+
+        # 【v2.2新增】记录提示词版本
+        self._log_prompt_version(state)
 
         try:
             # ==================== 1. 准备新品数据 ====================
@@ -115,9 +137,27 @@ class EmbeddingAgent(BaseAgent):
             self._log_metric(state, "dense_dim", dense_dim)
             self._log_metric(state, "sparse_nonzero", sparse_nonzero)
 
+            # 【v2.2新增】记录提示词执行成功
+            self._record_prompt_execution(
+                state,
+                success=True,
+                execution_time=time.time() - start_time,
+                metadata={
+                    "dense_dim": dense_dim,
+                    "sparse_nonzero": sparse_nonzero
+                }
+            )
+
             return state
 
         except Exception as e:
+            # 【v2.2新增】记录失败
+            self._record_prompt_execution(
+                state,
+                success=False,
+                execution_time=time.time() - start_time,
+                error=str(e)
+            )
             return self._handle_error(state, f"向量编码失败: {str(e)}")
 
 
@@ -125,7 +165,7 @@ if __name__ == "__main__":
     # 测试EmbeddingAgent
     from .state import create_initial_state
     from PIL import Image
-    from utils import load_image
+    from utils.core import load_image
     from config import PRODUCT_CSV, IMAGE_DIR
 
     # 创建测试状态（需要有真实图片）

@@ -32,7 +32,14 @@ from .state import PipelineState
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import OUTPUT_DIR
-from utils import save_image
+from utils.core import save_image
+
+# 【v2.2新增】导入提示词工程
+try:
+    from prompts.v2 import get_metrics, record_prompt_execution
+    PROMPTS_V2_AVAILABLE = True
+except ImportError:
+    PROMPTS_V2_AVAILABLE = False
 
 
 class FallbackAgent(BaseAgent):
@@ -54,14 +61,26 @@ class FallbackAgent(BaseAgent):
     """
 
     def __init__(self):
-        """初始化兜底Agent"""
+        """
+        初始化兜底Agent
+
+        【v2.2】集成提示词版本管理
+        """
         super().__init__("FallbackAgent")
         OUTPUT_DIR.mkdir(exist_ok=True)
+
+        # 【v2.2新增】设置提示词版本
+        self.set_prompt_version("2.0")
 
     @time_decorator("fallback_time")
     def run(self, state: PipelineState) -> PipelineState:
         """
         执行兜底处理流程
+
+        【v2.2】集成提示词工程：
+        - 记录提示词版本
+        - 追踪执行时间
+        - 记录错误信息
 
         Args:
             state: 包含错误信息的状态
@@ -69,7 +88,13 @@ class FallbackAgent(BaseAgent):
         Returns:
             更新后的状态，包含final_result
         """
+        import time
+        start_time = time.time()
+
         self._update_status(state, "processing", "FallbackAgent")
+
+        # 【v2.2新增】记录提示词版本
+        self._log_prompt_version(state)
 
         # ==================== 1. 记录兜底触发 ====================
         error_msg = state.get("error_msg", "未知错误")
@@ -84,11 +109,22 @@ class FallbackAgent(BaseAgent):
 
         # ==================== 2. 根据失败步骤选择策略 ====================
         if "retrieval" in current_step.lower() or "embedding" in current_step.lower():
-            return self._handle_retrieval_error(state, error_msg)
+            result = self._handle_retrieval_error(state, error_msg)
         elif "image" in current_step.lower() or "gen" in current_step.lower():
-            return self._handle_gen_error(state, error_msg)
+            result = self._handle_gen_error(state, error_msg)
         else:
-            return self._handle_generic_error(state, error_msg)
+            result = self._handle_generic_error(state, error_msg)
+
+        # 【v2.2新增】记录提示词执行（兜底场景）
+        self._record_prompt_execution(
+            result,
+            success=False,  # 兜底总是失败场景
+            execution_time=time.time() - start_time,
+            error=error_msg,
+            metadata={"fallback_type": current_step}
+        )
+
+        return result
 
     def _handle_retrieval_error(self, state: PipelineState, error_msg: str) -> PipelineState:
         """

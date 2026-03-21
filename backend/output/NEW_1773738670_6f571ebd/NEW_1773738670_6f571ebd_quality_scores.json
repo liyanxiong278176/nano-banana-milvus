@@ -1,9 +1,0 @@
-{
-  "clothing_accuracy": 5,
-  "pose_naturalness": 4,
-  "scene_quality": 4,
-  "lighting_quality": 4,
-  "commercial_value": 4,
-  "average": 4.2,
-  "is_fallback": false
-}
