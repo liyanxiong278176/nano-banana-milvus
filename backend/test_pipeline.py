@@ -37,7 +37,7 @@ def test_utils():
     print("=" * 60)
 
     try:
-        from utils import image_to_uri, sparse_to_dict
+        from utils.core import image_to_uri, sparse_to_dict
         from PIL import Image
         import numpy as np
 
@@ -69,7 +69,7 @@ def test_milvus():
     print("=" * 60)
 
     try:
-        from retrieval import BestsellerRetriever
+        from retrieval.retrieval import BestsellerRetriever
 
         retriever = BestsellerRetriever()
         print(f"✓ 检索器创建成功")
@@ -124,7 +124,7 @@ def test_embedding():
     print("=" * 60)
 
     try:
-        from embedding import EmbeddingGenerator
+        from vectorization.embedding import EmbeddingGenerator
 
         gen = EmbeddingGenerator()
 

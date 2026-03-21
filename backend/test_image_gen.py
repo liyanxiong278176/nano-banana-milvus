@@ -43,7 +43,7 @@ client = OpenAI(
 )
 
 # 准备请求
-from utils import image_to_uri
+from utils.core import image_to_uri
 
 gen_prompt = "Generate a professional product photo of a fashion model wearing a red dress, clean white background, studio lighting."
 

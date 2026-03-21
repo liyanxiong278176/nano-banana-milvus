@@ -38,7 +38,7 @@ from .state import PipelineState
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import OUTPUT_DIR
-from utils import save_image
+from utils.core import save_image
 
 
 class ResultAgent(BaseAgent):

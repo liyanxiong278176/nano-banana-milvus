@@ -27,7 +27,7 @@ except Exception as e:
 # 测试2: 工具函数
 print("\n[测试2] 测试缓存工具函数...")
 try:
-    from utils import get_cache_key, save_to_cache, load_from_cache, clear_cache
+    from utils.core import get_cache_key, save_to_cache, load_from_cache, clear_cache
 
     # 生成缓存键
     key1 = get_cache_key("test", "content1")
@@ -58,7 +58,7 @@ except Exception as e:
 # 测试3: ImageGenerator 缓存集成
 print("\n[测试3] 测试 ImageGenerator 缓存集成...")
 try:
-    from image_gen import ImageGenerator
+    from generation.image_gen import ImageGenerator
     from config import LLM_MODEL
 
     print(f"  [OK] ImageGenerator 导入成功")
@@ -80,7 +80,7 @@ try:
     print(f"  [OK] 创建了 {len(test_images)} 张测试图片")
 
     # 检查缓存函数是否在代码中被正确引用
-    import image_gen
+    import generation.image_gen
     has_cache_import = hasattr(image_gen, 'get_cache_key')
     print(f"    [INFO] image_gen.py 中导入了缓存函数: {has_cache_import}")
 
@@ -103,7 +103,7 @@ except Exception as e:
 print("\n[测试4] 验证缓存文件结构...")
 try:
     # 创建一个测试缓存
-    from utils import get_cache_key, save_to_cache
+    from utils.core import get_cache_key, save_to_cache
     test_key = get_cache_key("style_analysis", "test_content")
     save_to_cache(test_key, {"combined_style": "测试风格"})
 
