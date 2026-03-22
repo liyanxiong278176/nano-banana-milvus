@@ -1,0 +1,10 @@
+{
+  "clothing_accuracy": 6,
+  "pose_naturalness": 6,
+  "scene_quality": 6,
+  "lighting_quality": 6,
+  "commercial_value": 6,
+  "average": 6.0,
+  "is_fallback": true,
+  "error": "'average'"
+}

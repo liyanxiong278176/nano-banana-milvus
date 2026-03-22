@@ -1,0 +1,10 @@
+{
+  "clothing_accuracy": 8,
+  "pose_naturalness": 7,
+  "scene_quality": 9,
+  "lighting_quality": 8,
+  "commercial_value": 8,
+  "average": 8.0,
+  "execution_time": 6.565863370895386,
+  "is_fallback": false
+}

@@ -16,3 +16,5 @@ python-dotenv>=1.0.0
 langgraph>=1.0.0
 langchain>=1.0.0
 langchain-core>=1.0.0
+# 【新增】LangChain OpenAI 集成（统一的 LLM 调用）
+langchain-openai>=0.2.0
