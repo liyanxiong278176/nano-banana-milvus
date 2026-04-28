@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FashionAI 系统测试报告</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+        :root{
+            --bg:#faf8f5;--surface:#fff;--subtle:#f3ede5;--warm:#ebe3d7;
+            --t1:#1c1917;--t2:#57534e;--t3:#a8a29e;
+            --coral:#dc5a35;--coral-p:#fde8df;--coral-l:#f4a488;
+            --sage:#4a7c59;--sage-p:#f0fdf4;--sage-l:#a8c5ae;
+            --violet:#7c3aed;--violet-p:#f3f0ff;--violet-l:#c4b5fd;
+            --gold:#c8a96e;--gold-p:#f5edd8;--gold-l:#e8d5a8;
+            --blue:#3b82f6;--blue-p:#eff6ff;
+            --red:#dc2626;--red-p:#fef2f2;
+            --amber:#d97706;--amber-p:#fffbeb;
+            --bdr:#e5ddd3;--bdr-l:#f0ebe4;
+            --sh:0 2px 12px rgba(28,25,23,0.06);
+        }
+        html{scroll-behavior:smooth}
+        body{font-family:'DM Sans',-apple-system,sans-serif;background:var(--bg);color:var(--t1);font-size:13px;line-height:1.6}
+        .container{max-width:1300px;margin:0 auto;padding:32px 24px}
+
+        /* ===== HEADER ===== */
+        .rpt-header{
+            background:linear-gradient(135deg,#1c1917 0%,#2d2218 50%,#3c2d20 100%);
+            border-radius:24px;padding:40px 44px;margin-bottom:28px;color:#fff;position:relative;overflow:hidden;
+        }
+        .rpt-header::before{content:'';position:absolute;right:-50px;top:-50px;width:350px;height:350px;background:radial-gradient(circle,rgba(220,90,53,0.25),transparent);pointer-events:none}
+        .rpt-header::after{content:'';position:absolute;left:10%;bottom:-80px;width:250px;height:250px;background:radial-gradient(circle,rgba(124,58,237,0.15),transparent);pointer-events:none}
+        .hdr-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(220,90,53,0.2);border:1px solid rgba(220,90,53,0.4);color:var(--coral-l);padding:4px 14px;border-radius:100px;font-size:11px;font-weight:600;letter-spacing:.05em;margin-bottom:14px}
+        .hdr-title{font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:700;line-height:1.1;margin-bottom:6px}
+        .hdr-sub{font-size:14px;color:rgba(255,255,255,0.55);margin-bottom:20px;max-width:700px}
+        .hdr-metas{display:flex;gap:20px;flex-wrap:wrap}
+        .hdr-meta{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,0.5)}
+        .hdr-dot{width:4px;height:4px;border-radius:50%;background:var(--coral)}
+
+        /* ===== KPI STRIP ===== */
+        .kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:24px}
+        .kpi-card{background:var(--surface);border:1px solid var(--bdr-l);border-radius:16px;padding:18px 16px;text-align:center;box-shadow:var(--sh);transition:all .2s}
+        .kpi-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(28,25,23,0.1)}
+        .kpi-icon{font-size:18px;margin-bottom:6px}
+        .kpi-val{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:700;line-height:1;margin-bottom:3px}
+        .kpi-lbl{font-size:11px;color:var(--t3);letter-spacing:.03em}
+        .kc-total .kpi-val{color:var(--blue)}
+        .kc-pass .kpi-val{color:var(--sage)}
+        .kc-fail .kpi-val{color:var(--red)}
+        .kc-skip .kpi-val{color:var(--amber)}
+        .kc-rate .kpi-val{color:var(--coral)}
+
+        /* ===== PASS RATE BAR ===== */
+        .rate-bar{background:var(--surface);border:1px solid var(--bdr-l);border-radius:14px;padding:18px 20px;margin-bottom:24px;box-shadow:var(--sh)}
+        .rb-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+        .rb-label{font-size:12px;font-weight:700;color:var(--t2)}
+        .rb-pct{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:var(--sage)}
+        .rb-track{height:10px;background:var(--warm);border-radius:5px;overflow:hidden;display:flex}
+        .rb-seg{transition:width .6s ease}
+        .rb-pass{background:var(--sage)}.rb-fail{background:var(--red)}.rb-skip{background:var(--amber)}
+        .rb-leg{display:flex;gap:16px;margin-top:8px;flex-wrap:wrap}
+        .rb-leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3)}
+        .rb-leg-dot{width:10px;height:10px;border-radius:3px}
+
+        /* ===== METRIC VALIDATION CARDS ===== */
+        .metric-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px}
+        .mc{border-radius:18px;padding:22px;border:1px solid;box-shadow:var(--sh);position:relative;overflow:hidden}
+        .mc::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;border-radius:0 4px 4px 0}
+        .mc-lang{background:var(--violet-p);border-color:#e9ddfa}.mc-lang::before{background:var(--violet)}
+        .mc-milvus{background:var(--sage-p);border-color:#c6e0cc}.mc-milvus::before{background:var(--sage)}
+        .mc-loop{background:var(--coral-p);border-color:#f5c7b8}.mc-loop::before{background:var(--coral)}
+        .mc-eyebrow{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+        .mc-lang .mc-eyebrow{color:var(--violet)}
+        .mc-milvus .mc-eyebrow{color:var(--sage)}
+        .mc-loop .mc-eyebrow{color:var(--coral)}
+        .mc-title{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:700;color:var(--t1);margin-bottom:10px;line-height:1.2}
+        .mc-targets{display:flex;flex-direction:column;gap:6px}
+        .mc-row{display:flex;align-items:center;gap:8px;font-size:12px}
+        .mc-row-label{color:var(--t2);min-width:80px;font-weight:500}
+        .mc-row-bar{flex:1;height:6px;background:rgba(255,255,255,0.6);border-radius:3px;overflow:hidden;min-width:60px}
+        .mc-row-fill{height:100%;border-radius:3px;transition:width .6s}
+        .mc-row-val{font-weight:700;min-width:50px;text-align:right;font-size:11px}
+
+        /* ===== FILTERS ===== */
+        .filter-bar{display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap}
+        .f-search{flex:1;min-width:200px;padding:8px 14px;border:1.5px solid var(--bdr);border-radius:10px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--t1);transition:border .2s}
+        .f-search:focus{outline:none;border-color:var(--coral)}
+        .f-select{padding:8px 30px 8px 14px;border:1.5px solid var(--bdr);border-radius:10px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--t1);cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23a8a29e' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+        .f-info{font-size:11px;color:var(--t3)}
+
+        /* ===== MODULE TABS ===== */
+        .mod-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+        .mod-tab{padding:7px 16px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--bdr);background:var(--surface);color:var(--t2);transition:all .2s;display:flex;align-items:center;gap:5px}
+        .mod-tab:hover{border-color:var(--coral);color:var(--coral)}
+        .mod-tab.active{background:var(--coral);border-color:var(--coral);color:#fff}
+        .tab-cnt{font-size:10px;opacity:.7}
+
+        /* ===== TABLE ===== */
+        .tbl-wrap{background:var(--surface);border:1px solid var(--bdr-l);border-radius:16px;overflow:hidden;box-shadow:var(--sh);margin-bottom:20px}
+        .tbl-scroll{overflow-x:auto}
+        table{width:100%;border-collapse:collapse;min-width:1000px}
+        thead{background:var(--subtle)}
+        th{padding:10px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--bdr-l);white-space:nowrap}
+        td{padding:9px 12px;font-size:12px;color:var(--t2);border-bottom:1px solid var(--bdr-l);vertical-align:middle}
+        tbody tr:hover{background:var(--bg)}
+        tbody tr:last-child td{border-bottom:none}
+        .tag{display:inline-flex;align-items:center;gap:3px;padding:2px 10px;border-radius:100px;font-size:10px;font-weight:700;letter-spacing:.04em}
+        .tg-pass{background:#dcfce7;color:#15803d}.tg-fail{background:#fee2e2;color:#b91c1c}.tg-skip{background:#fef3c7;color:#92400e}
+        .tg-p1{background:var(--red-p);color:var(--red)}.tg-p2{background:var(--amber-p);color:var(--amber)}.tg-p3{background:var(--blue-p);color:var(--blue)}
+        .tg-open{background:#fee2e2;color:#b91c1c}.tg-fixed{background:#dcfce7;color:#15803d}.tg-wip{background:#fef3c7;color:#92400e}
+        .pbar{display:inline-flex;align-items:center;gap:6px}
+        .pbar-track{width:50px;height:5px;background:var(--warm);border-radius:3px;overflow:hidden}
+        .pbar-fill{height:100%;border-radius:3px}
+        .pf-p1{background:var(--red)}.pf-p2{background:var(--amber)}.pf-p3{background:var(--blue)}
+        .ell{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+        /* ===== PAGINATION ===== */
+        .pgn{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:24px}
+        .pgn-info{font-size:12px;color:var(--t3)}
+        .pgn-ctrls{display:flex;gap:5px;align-items:center}
+        .pgn-btn{padding:6px 13px;border:1.5px solid var(--bdr);border-radius:8px;font-size:12px;font-weight:500;background:var(--surface);color:var(--t2);cursor:pointer;transition:all .2s}
+        .pgn-btn:hover{border-color:var(--coral);color:var(--coral)}
+        .pgn-btn.active{background:var(--coral);border-color:var(--coral);color:#fff}
+        .pgn-btn:disabled{opacity:.35;cursor:not-allowed}
+        .pgn-dots{padding:0 4px;color:var(--t3)}
+
+        /* ===== BUG TABLE ===== */
+        .bug-wrap{background:var(--surface);border:1px solid var(--bdr-l);border-radius:16px;overflow:hidden;box-shadow:var(--sh);margin-bottom:24px}
+        .bug-hdr{padding:14px 20px;background:var(--subtle);border-bottom:1px solid var(--bdr-l);display:flex;justify-content:space-between;align-items:center}
+        .bug-title{font-size:13px;font-weight:700;color:var(--t1);display:flex;align-items:center;gap:6px}
+        .bug-cnt{font-size:11px;color:var(--red);font-weight:600}
+
+        .footer{text-align:center;padding:20px;color:var(--t3);font-size:11px}
+        @media(max-width:1024px){.metric-cards,.kpi-strip{grid-template-columns:repeat(2,1fr)}}
+        @media(max-width:640px){.kpi-strip{grid-template-columns:1fr 1fr}.metric-cards{grid-template-columns:1fr}}
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Header -->
+    <div class="rpt-header">
+        <div class="hdr-badge">MOCK DATA · FashionAI Test Suite v2.0</div>
+        <h1 class="hdr-title">FashionAI 核心指标验证测试报告</h1>
+        <p class="hdr-sub">围绕 LangGraph 多Agent编排容错性、Milvus混合检索召回率、循环检索优化通过率三大核心指标，展开 800+ 用例的系统性验证测试</p>
+        <div class="hdr-metas">
+            <div class="hdr-meta"><span class="hdr-dot"></span>2026-04-27 执行</div>
+            <div class="hdr-meta"><span class="hdr-dot"></span>Mock Data · 无后端依赖</div>
+            <div class="hdr-meta"><span class="hdr-dot"></span>测试环境: CI Pipeline</div>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-strip">
+        <div class="kpi-card kc-total"><div class="kpi-icon">📋</div><div class="kpi-val" id="kpi-total">--</div><div class="kpi-lbl">总测试用例</div></div>
+        <div class="kpi-card kc-pass"><div class="kpi-icon">✅</div><div class="kpi-val" id="kpi-pass">--</div><div class="kpi-lbl">通过</div></div>
+        <div class="kpi-card kc-fail"><div class="kpi-icon">❌</div><div class="kpi-val" id="kpi-fail">--</div><div class="kpi-lbl">失败</div></div>
+        <div class="kpi-card kc-skip"><div class="kpi-icon">⏭️</div><div class="kpi-val" id="kpi-skip">--</div><div class="kpi-lbl">跳过</div></div>
+        <div class="kpi-card kc-rate"><div class="kpi-icon">📈</div><div class="kpi-val" id="kpi-rate">--</div><div class="kpi-lbl">总通过率</div></div>
+    </div>
+
+    <!-- Pass Rate Bar -->
+    <div class="rate-bar">
+        <div class="rb-head"><span class="rb-label">测试用例通过率</span><span class="rb-pct" id="rb-pct">--</span></div>
+        <div class="rb-track"><div class="rb-seg rb-pass" id="rb-pass"></div><div class="rb-seg rb-fail" id="rb-fail"></div><div class="rb-seg rb-skip" id="rb-skip"></div></div>
+        <div class="rb-leg">
+            <div class="rb-leg-item"><div class="rb-leg-dot" style="background:var(--sage)"></div>通过 (<span id="lg-p">0</span>)</div>
+            <div class="rb-leg-item"><div class="rb-leg-dot" style="background:var(--red)"></div>失败 (<span id="lg-f">0</span>)</div>
+            <div class="rb-leg-item"><div class="rb-leg-dot" style="background:var(--amber)"></div>跳过 (<span id="lg-s">0</span>)</div>
+        </div>
+    </div>
+
+    <!-- Core Metric Validation Cards -->
+    <div class="metric-cards" id="metric-cards"></div>
+
+    <!-- Module Tabs -->
+    <div class="mod-tabs" id="mod-tabs"></div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+        <input type="text" class="f-search" id="f-search" placeholder="🔍 搜索用例ID、名称...">
+        <select class="f-select" id="f-status"><option value="">全部状态</option><option value="PASS">通过</option><option value="FAIL">失败</option><option value="SKIP">跳过</option></select>
+        <select class="f-select" id="f-pri"><option value="">全部优先级</option><option value="P1">P1</option><option value="P2">P2</option><option value="P3">P3</option></select>
+        <span class="f-info" id="f-info"></span>
+    </div>
+
+    <!-- Table -->
+    <div class="tbl-wrap"><div class="tbl-scroll"><table>
+        <thead><tr><th>#</th><th>用例ID</th><th>用例名称</th><th>模块</th><th>优先级</th><th>耗时</th><th>验证指标</th><th>实际结果</th><th>状态</th></tr></thead>
+        <tbody id="tbody"></tbody>
+    </table></div></div>
+
+    <!-- Pagination -->
+    <div class="pgn"><div class="pgn-info" id="pgn-info"></div><div class="pgn-ctrls" id="pgn-ctrls"></div></div>
+
+    <!-- Bugs -->
+    <div class="bug-wrap">
+        <div class="bug-hdr"><span class="bug-title">🐛 缺陷汇总</span><span class="bug-cnt" id="bug-cnt"></span></div>
+        <div class="tbl-scroll"><table>
+            <thead><tr><th>缺陷ID</th><th>严重级别</th><th>关联指标</th><th>缺陷描述</th><th>发现模块</th><th>日期</th><th>状态</th></tr></thead>
+            <tbody id="bug-tbody"></tbody>
+        </table></div>
+    </div>
+
+    <div class="footer">报告生成: 2026-04-27 · Mock Test Data · nano-banana-milvus2 · FashionAI</div>
+</div>
+
+<script>
+(function(){
+/* ===== SEEDED RNG ===== */
+function sr(seed){let s=seed;return ()=>{s=(s*1664525+1013904223)&0xffffffff;return(s>>>0)/4294967296}}
+function pick(r,a){return a[Math.floor(r()*a.length)]}
+function wPick(r,o,w){let v=r();for(let i=0;i<o.length;i++){v-=w[i];if(v<=0)return o[i]}return o[o.length-1]}
+
+/* ===== MODULE & TEST CASE DEFINITIONS ===== */
+const MODULES=[
+    {id:'langgraph',name:'LangGraph编排',icon:'◈',color:'#7c3aed',
+     metric:'容错性提升 35%',target:35,actual:34.8,
+     submodules:['状态转换','条件边重试','Agent协同','异常恢复','并发调度','日志审计']},
+    {id:'milvus',name:'Milvus混合检索',icon:'◎',color:'#4a7c59',
+     metric:'召回率 72%→90%',target:90,actual:89.6,
+     submodules:['Dense向量','BM25稀疏','标量过滤','融合排序','索引优化','性能基准']},
+    {id:'loop',name:'循环检索优化',icon:'◉',color:'#dc5a35',
+     metric:'通过率提升 30%',target:30,actual:29.7,
+     submodules:['LLM评分','查询改写','循环控制','质量渐进','阈值策略','强制输出']},
+    {id:'api',name:'API接口',icon:'⬡',color:'#3b82f6',metric:'接口可用性 99.5%',target:99.5,actual:99.6,
+     submodules:['上传接口','任务轮询','结果下载','鉴权限流']},
+    {id:'gen',name:'图片生成引擎',icon:'✦',color:'#c8a96e',metric:'生图成功率 92%',target:92,actual:91.8,
+     submodules:['背景去除','风格提取','多图融合','分辨率']},
+    {id:'qa',name:'质量评估模块',icon:'◇',color:'#ec4899',metric:'评分一致性 ≥95%',target:95,actual:94.7,
+     submodules:['服装评分','姿势评分','场景评分','布光评分','商业评分','综合评分']},
+    {id:'perf',name:'性能基准',icon:'⚡',color:'#0891b2',metric:'P95延迟 <3s',target:3000,actual:2870,
+     submodules:['端到端延迟','检索延迟','生图延迟','并发吞吐']},
+];
+
+const STATUS_POOL=['PASS','PASS','PASS','PASS','PASS','PASS','PASS','PASS','PASS','FAIL','FAIL','SKIP'];
+const PRIORITIES=['P1','P2','P3'];
+const PRI_W=[0.08,0.32,0.60];
+
+/* Per-module test name templates with metric context */
+const TC_TEMPLATES={
+'langgraph':[
+    '状态转换 Upload→Retrieval 验证','状态转换 Retrieval→Gen 验证','状态转换 Gen→QualityJudge 验证',
+    '状态转换 QualityJudge→Result 验证','条件边: 质量达标时路由至Result','条件边: 质量不达标时路由至Gen重试',
+    '重试次数上限 ≤1次 控制','重试后质量提升率验证','容错性对比: LangGraph vs 顺序执行基线',
+    '容错性提升 ≥35% 指标验证','Agent并发调用顺序一致性','Agent超时自动降级机制',
+    'Agent心跳检测与恢复','状态快照持久化与恢复','工作流取消状态清理','子工作流嵌套执行验证',
+    'Agent资源隔离性验证','状态转换全链路日志完整性','异常状态自动回滚机制','状态机初始态加载稳定性',
+    '多工作流并行执行隔离性','条件边超时兜底策略','Agent调度负载均衡效果','状态机死锁检测与恢复',
+    'Upload Agent 文件大小限制处理','Retrieval Agent 空结果集处理','Gen Agent GPU内存不足降级',
+    'QualityJudge 评分模型版本一致性','Result Agent 输出格式校验','重试机制对整体延迟影响',
+    '容错性: 网络抖动场景稳定性','容错性: 服务重启后状态恢复','容错性: 消息丢失后补偿机制',
+    '条件边: 边界评分(7.0)路由正确性','Agent调用链追踪ID传播','状态机事件溯源验证',
+],
+'milvus':[
+    'Dense向量检索 Top-K 精确度','Dense向量 embedding 维度一致性','BM25关键词精确匹配率',
+    'BM25 TF-IDF 权重计算验证','标量过滤: 品类筛选准确性','标量过滤: 销量范围筛选',
+    '标量过滤: 品类+销量组合条件','三维融合排序权重 DENSE×0.6','三维融合排序权重 BM25×0.3',
+    '三维融合排序权重 SCALAR×0.1','Top10召回率 ≥90% 指标验证','召回率提升 72%→90% 达标',
+    '检索准确率提升 ≥18% 验证','向量归一化一致性校验','HNSW索引构建参数验证',
+    'IVF索引搜索精度对比','Rerank排序稳定性测试','检索超时兜底机制','空结果集降级策略',
+    '模糊匹配边界条件验证','GPU加速检索性能对比','分布式Milvus集群数据一致性',
+    '连接池复用率验证','查询计划缓存命中率','分页检索一致性','向量索引重建无中断',
+    '高并发检索QPS基准测试','混合检索 vs 纯Dense A/B对比','混合检索 vs 纯BM25 A/B对比',
+    '标量过滤索引命中优化','召回率在不同数据量下稳定性','融合权重敏感性分析',
+    '索引参数调优对召回率影响','检索延迟 P50/P95/P99 分布',
+],
+'loop':[
+    'LLM评分 ≥7.0 直接输出验证','LLM评分 <7.0 触发查询改写','评分阈值 7.0 边界值测试',
+    '循环上限 ≤3轮 强制控制','第1轮检索质量评分分布','第2轮查询改写后评分提升率',
+    '第3轮最终强制输出机制','多轮循环质量渐进趋势验证','查询改写Prompt构造准确性',
+    '循环终止条件覆盖率','再检索查询扩展有效性','质量评分异常值处理',
+    '循环轮次计数准确性','最后一轮强制输出质量保底','生图一次通过率 ≥30% 提升',
+    '通过率提升对比基线验证','循环缓存命中避免重复计算','查询改写语义保持度',
+    '评分波动 ±0.5 稳定性验证','循环总耗时不超过阈值','超时中断恢复策略',
+    '循环检索 vs 单次检索 A/B对比','不同品类循环轮次分布统计','查询改写去重机制',
+    '评分模型在循环中一致性','循环日志完整性审计','动态阈值调整可行性',
+    '循环上下文窗口管理','查询改写历史回溯能力','循环中Milvus连接复用',
+],
+'api':[
+    '图片上传接口: 文件大小限制 10MB','图片上传接口: 格式校验 JPG/PNG/WebP',
+    '任务状态查询接口响应时间','结果下载接口鉴权验证','结果下载接口限速控制',
+    'Webhook回调可靠性验证','接口幂等性验证','请求超时重试策略','大文件分片上传完整性',
+    '接口版本 v1/v2 向后兼容',
+],
+'gen':[
+    '平铺图背景去除准确率','服装关键点检测精度','参考风格特征提取准确性',
+    '多图融合边缘自然度','生成图片分辨率 1024×1536','GPU显存占用峰值监控',
+    '批量生成并发稳定性','生成图片色彩保真度',
+],
+'qa':[
+    '服装准确性评分一致性','姿势自然度评分一致性','场景质量评分一致性',
+    '布光效果评分一致性','商业价值综合评分一致性','评分模型热加载无中断',
+    '评分结果缓存命中率','评分超时降级策略',
+],
+'perf':[
+    '端到端 P95延迟基准','Milvus检索 P50延迟','生图引擎 P95延迟','并发50 QPS吞吐测试',
+],
+};
+
+const METRICS_MAP={
+'langgraph':'容错性提升35%',
+'milvus':'召回率90% / 准确率+18%',
+'loop':'通过率提升30%',
+'api':'可用性99.5%',
+'gen':'成功率92%',
+'qa':'一致性≥95%',
+'perf':'P95<3s',
+};
+
+/* ===== GENERATE TEST CASES ===== */
+const TOTAL=800;
+const rng=sr(42);
+const modCounts={
+    langgraph:Math.floor(TOTAL*0.30), // 240
+    milvus:Math.floor(TOTAL*0.28),    // 224
+    loop:Math.floor(TOTAL*0.22),      // 176
+    api:Math.floor(TOTAL*0.07),       // 56
+    gen:Math.floor(TOTAL*0.06),       // 48
+    qa:Math.floor(TOTAL*0.04),        // 32
+    perf:TOTAL-Math.floor(TOTAL*0.30)-Math.floor(TOTAL*0.28)-Math.floor(TOTAL*0.22)-Math.floor(TOTAL*0.07)-Math.floor(TOTAL*0.06)-Math.floor(TOTAL*0.04), // ~24
+};
+
+const cases=[];
+let gIdx=1;
+for(const mod of MODULES){
+    const cnt=modCounts[mod.id];
+    const names=TC_TEMPLATES[mod.id]||['通用功能验证'];
+    for(let i=0;i<cnt;i++){
+        const name=names[i%names.length]+(i>=names.length?` [变体${Math.floor(i/names.length)+1}]`:'');
+        const pri=wPick(rng,PRIORITIES,PRI_W);
+        const status=pick(rng,STATUS_POOL);
+        const dur=status==='PASS'?Math.floor(8+rng()*180):status==='FAIL'?Math.floor(40+rng()*420):0;
+        const metric=METRICS_MAP[mod.id];
+        let actual='';
+        if(status==='PASS'){
+            const ps=['验证通过，数据符合预期','功能正常，边界条件覆盖','通过，性能指标达标','Pass，回归测试无异常','验证成功，指标满足要求'];
+            actual=pick(rng,ps)+(dur>0?` (${dur}ms)`:'');
+        }else if(status==='FAIL'){
+            const fs=[`实测值${(mod.actual-rng()*3).toFixed(1)}%，未达${mod.target}%目标`,'数据不一致，差异超出阈值','执行超时，超时阈值'+(dur+50)+'ms','边界条件处理异常，需修复'];
+            actual=pick(rng,fs);
+        }else{
+            actual=pick(rng,['依赖模块暂不可用','已由E2E覆盖','环境限制跳过']);
+        }
+        cases.push({id:gIdx,tcId:`TC-${mod.id.substring(0,2).toUpperCase()}-${String(gIdx).padStart(4,'0')}`,
+            name,module:mod.name,modId:mod.id,pri,dur,metric,actual,status});
+        gIdx++;
+    }
+}
+// shuffle
+for(let i=cases.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[cases[i],cases[j]]=[cases[j],cases[i]]}
+
+/* ===== GENERATE BUGS ===== */
+const BUGS=[
+    {id:'BUG-001',sev:'高',metric:'召回率90%',desc:'三维融合权重在数据量>10万时DENSE权重漂移至0.52，未保持0.6配置值，导致召回率降至87.3%',mod:'Milvus混合检索',date:'2026-04-20',status:'Open'},
+    {id:'BUG-002',sev:'高',metric:'通过率提升30%',desc:'循环检索第3轮强制输出时质量评分仅6.2，低于7.0阈值，通过率实际提升29.7%未达30%目标',mod:'循环检索优化',date:'2026-04-21',status:'WIP'},
+    {id:'BUG-003',sev:'中',metric:'容错性提升35%',desc:'LangGraph条件边在并发>50时出现2次路由错误，容错性实测34.8%略低于35%目标',mod:'LangGraph编排',date:'2026-04-22',status:'Open'},
+    {id:'BUG-004',sev:'中',metric:'准确率+18%',desc:'BM25稀疏向量在中文分词边界处匹配失败率偏高，准确率提升仅17.6%略低于18%',mod:'Milvus混合检索',date:'2026-04-23',status:'WIP'},
+    {id:'BUG-005',sev:'低',metric:'P95<3s',desc:'高并发(>100QPS)时Milvus检索P95延迟飙升至3.2s，超过3s阈值',mod:'性能基准',date:'2026-04-24',status:'Open'},
+    {id:'BUG-006',sev:'低',metric:'一致性≥95%',desc:'质量评估模型对同一张图连续5次评分标准差0.52，略超±0.5波动范围',mod:'质量评估模块',date:'2026-04-24',status:'Fixed'},
+    {id:'BUG-007',sev:'中',metric:'召回率90%',desc:'HNSW索引ef参数=64时召回率仅86%，需调至128才达90%，但延迟增加40%',mod:'Milvus混合检索',date:'2026-04-25',status:'Open'},
+    {id:'BUG-008',sev:'低',metric:'通过率提升30%',desc:'循环检索日志在第2轮查询改写时缺少原始query记录，审计追踪不完整',mod:'循环检索优化',date:'2026-04-25',status:'Open'},
+    {id:'BUG-009',sev:'高',metric:'成功率92%',desc:'GPU显存不足时生图引擎未优雅降级，直接OOM崩溃，成功率降至88%',mod:'图片生成引擎',date:'2026-04-26',status:'WIP'},
+    {id:'BUG-010',sev:'中',metric:'可用性99.5%',desc:'大文件上传(>8MB)时API网关内存占用峰值超标，存在OOM风险',mod:'API接口',date:'2026-04-26',status:'Open'},
+];
+
+/* ===== STATS ===== */
+const passN=cases.filter(c=>c.status==='PASS').length;
+const failN=cases.filter(c=>c.status==='FAIL').length;
+const skipN=cases.filter(c=>c.status==='SKIP').length;
+const rate=((passN/TOTAL)*100).toFixed(1);
+
+/* ===== RENDER: KPI ===== */
+document.getElementById('kpi-total').textContent=TOTAL;
+document.getElementById('kpi-pass').textContent=passN;
+document.getElementById('kpi-fail').textContent=failN;
+document.getElementById('kpi-skip').textContent=skipN;
+document.getElementById('kpi-rate').textContent=rate+'%';
+document.getElementById('rb-pct').textContent=rate+'% 通过率';
+document.getElementById('rb-pass').style.width=rate+'%';
+document.getElementById('rb-fail').style.width=((failN/TOTAL)*100).toFixed(1)+'%';
+document.getElementById('rb-skip').style.width=((skipN/TOTAL)*100).toFixed(1)+'%';
+document.getElementById('lg-p').textContent=passN;
+document.getElementById('lg-f').textContent=failN;
+document.getElementById('lg-s').textContent=skipN;
+
+/* ===== RENDER: METRIC VALIDATION CARDS ===== */
+const mcEl=document.getElementById('metric-cards');
+const coreMods=MODULES.slice(0,3);
+for(const m of coreMods){
+    const mCases=cases.filter(c=>c.modId===m.id);
+    const mPass=mCases.filter(c=>c.status==='PASS').length;
+    const mRate=mCases.length>0?((mPass/mCases.length)*100).toFixed(1):'0';
+    const pct=m.actual/m.target*100;
+    const pctColor=pct>=99?'var(--sage)':pct>=95?'var(--amber)':'var(--red)';
+    const statusIcon=pct>=99.5?'✅':pct>=95?'⚠️':'❌';
+    mcEl.innerHTML+=`
+    <div class="mc mc-${m.id}">
+        <div class="mc-eyebrow">${m.icon} ${m.name}</div>
+        <div class="mc-title">${m.metric}</div>
+        <div class="mc-targets">
+            <div class="mc-row"><span class="mc-row-label">目标值</span><div class="mc-row-bar"><div class="mc-row-fill" style="width:100%;background:${m.color}"></div></div><span class="mc-row-val" style="color:${m.color}">${m.target}${String(m.target).includes('%')?'%':''}</span></div>
+            <div class="mc-row"><span class="mc-row-label">实测值</span><div class="mc-row-bar"><div class="mc-row-fill" style="width:${Math.min(pct,100).toFixed(1)}%;background:${pctColor}"></div></div><span class="mc-row-val" style="color:${pctColor}">${m.actual}${String(m.target).includes('%')?'%':''}</span></div>
+            <div class="mc-row"><span class="mc-row-label">达成率</span><div class="mc-row-bar"><div class="mc-row-fill" style="width:${Math.min(pct,100).toFixed(1)}%;background:${pctColor}"></div></div><span class="mc-row-val" style="color:${pctColor}">${pct.toFixed(1)}% ${statusIcon}</span></div>
+            <div class="mc-row"><span class="mc-row-label">用例通过率</span><div class="mc-row-bar"><div class="mc-row-fill" style="width:${mRate}%;background:${m.color}"></div></div><span class="mc-row-val">${mRate}%</span></div>
+        </div>
+    </div>`;
+}
+
+/* ===== RENDER: MODULE TABS ===== */
+const tabEl=document.getElementById('mod-tabs');
+function mkTab(label,cnt,active){const b=document.createElement('button');b.className='mod-tab'+(active?' active':'');b.textContent=label;const s=document.createElement('span');s.className='tab-cnt';s.textContent=cnt;b.appendChild(s);return b}
+tabEl.appendChild(mkTab('全部',TOTAL,true));
+for(const m of MODULES){tabEl.appendChild(mkTab(m.name,modCounts[m.id],false))}
+
+/* ===== TABLE RENDERING ===== */
+const PS=50;
+let page=1,curMod='',curStatus='',curPri='',curSearch='';
+
+function filtered(){return cases.filter(c=>{
+    if(curMod&&c.modId!==curMod)return false;
+    if(curStatus&&c.status!==curStatus)return false;
+    if(curPri&&c.pri!==curPri)return false;
+    if(curSearch){const s=curSearch.toLowerCase();if(!c.tcId.toLowerCase().includes(s)&&!c.name.toLowerCase().includes(s)&&!c.actual.toLowerCase().includes(s))return false}
+    return true
+})}
+
+function render(p){
+    const f=filtered();const tp=Math.ceil(f.length/PS);const st=(p-1)*PS;const en=st+PS;const pg=f.slice(st,en);
+    const tbody=document.getElementById('tbody');
+    tbody.innerHTML=pg.map(c=>{
+        const stc=c.status==='PASS'?'tg-pass':c.status==='FAIL'?'tg-fail':'tg-skip';
+        const prc=c.pri==='P1'?'tg-p1':c.pri==='P2'?'tg-p2':'tg-p3';
+        const pfc=c.pri==='P1'?'pf-p1':c.pri==='P2'?'pf-p2':'pf-p3';
+        const pw=c.pri==='P1'?100:c.pri==='P2'?65:35;
+        return `<tr>
+            <td>${c.id}</td><td><strong>${c.tcId}</strong></td>
+            <td class="ell" title="${c.name}">${c.name}</td>
+            <td>${c.module}</td>
+            <td><div class="pbar"><div class="pbar-track"><div class="pbar-fill ${pfc}" style="width:${pw}%"></div></div><span class="tag ${prc}">${c.pri}</span></div></td>
+            <td>${c.dur>0?c.dur+'ms':'-'}</td>
+            <td><span style="font-size:10px;color:var(--t3)">${c.metric}</span></td>
+            <td class="ell" title="${c.actual}">${c.actual}</td>
+            <td><span class="tag ${stc}">${c.status}</span></td>
+        </tr>`}).join('');
+
+    document.getElementById('f-info').textContent=`${f.length} 条记录`;
+    document.getElementById('pgn-info').textContent=tp>0?`显示 ${st+1}-${Math.min(en,f.length)} 条，共 ${f.length} 条`:'无匹配';
+
+    const ctrl=document.getElementById('pgn-ctrls');ctrl.innerHTML='';
+    if(tp<=1)return;
+    let sb=Math.max(1,p-2),eb=Math.min(tp,sb+4);if(eb-sb<4)sb=Math.max(1,eb-4);
+    const mk=(t,pg,dis,act)=>{const b=document.createElement('button');b.className='pgn-btn'+(act?' active':'');b.textContent=t;b.disabled=!!dis;if(!dis)b.onclick=()=>render(pg);return b};
+    ctrl.appendChild(mk('‹',p-1,p===1));
+    if(sb>1){ctrl.appendChild(mk('1',1));if(sb>2)ctrl.innerHTML+='<span class="pgn-dots">…</span>'}
+    for(let i=sb;i<=eb;i++)ctrl.appendChild(mk(String(i),i,false,i===p));
+    if(eb<tp){if(eb<tp-1)ctrl.innerHTML+='<span class="pgn-dots">…</span>';ctrl.appendChild(mk(String(tp),tp))}
+    ctrl.appendChild(mk('›',p+1,p===tp));
+}
+
+/* ===== EVENT HANDLERS ===== */
+document.getElementById('mod-tabs').addEventListener('click',e=>{
+    const t=e.target.closest('.mod-tab');if(!t)return;
+    document.querySelectorAll('.mod-tab').forEach(b=>b.classList.remove('active'));t.classList.add('active');
+    const txt=t.textContent.replace(/\d+/g,'').trim();
+    const found=MODULES.find(m=>m.name===txt);
+    curMod=found?found.id:'';page=1;render(page);
+});
+document.getElementById('f-status').addEventListener('change',e=>{curStatus=e.target.value;page=1;render(page)});
+document.getElementById('f-pri').addEventListener('change',e=>{curPri=e.target.value;page=1;render(page)});
+let st;document.getElementById('f-search').addEventListener('input',e=>{clearTimeout(st);st=setTimeout(()=>{curSearch=e.target.value;page=1;render(page)},250)});
+
+/* ===== RENDER BUGS ===== */
+document.getElementById('bug-cnt').textContent=BUGS.length+' 个已知缺陷';
+document.getElementById('bug-tbody').innerHTML=BUGS.map(b=>{
+    const sc=b.sev==='高'?'tg-p1':b.sev==='中'?'tg-p2':'tg-p3';
+    const stc=b.status==='Open'?'tg-open':b.status==='Fixed'?'tg-fixed':'tg-wip';
+    return `<tr><td><strong>${b.id}</strong></td><td><span class="tag ${sc}">${b.sev}</span></td><td style="font-size:11px;color:var(--coral);font-weight:600">${b.metric}</td><td class="ell" style="max-width:340px" title="${b.desc}">${b.desc}</td><td>${b.mod}</td><td>${b.date}</td><td><span class="tag ${stc}">${b.status}</span></td></tr>`
+}).join('');
+
+/* ===== INIT ===== */
+render(1);
+})();
+</script>
+</body>
+</html>

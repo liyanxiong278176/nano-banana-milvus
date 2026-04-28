@@ -6,92 +6,75 @@
   <title>FashionAI - 智能商品宣传图生成</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
-    * {
+    *, *::before, *::after {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
 
     :root {
-      --primary: #0a0a0f;
-      --primary-light: #1a1a2e;
-      --accent: #7c3aed;
-      --accent-light: #a78bfa;
-      --accent-glow: rgba(124, 58, 237, 0.4);
-      --success: #10b981;
-      --warning: #f59e0b;
-      --text: #e5e7eb;
-      --text-muted: #9ca3af;
-      --border: rgba(124, 58, 237, 0.2);
-      --card-bg: rgba(26, 26, 46, 0.6);
-      --glass: rgba(10, 10, 15, 0.8);
+      --bg-base: #faf8f5;
+      --bg-surface: #ffffff;
+      --bg-subtle: #f3ede5;
+      --bg-warm: #ebe3d7;
+      --text-primary: #1c1917;
+      --text-secondary: #57534e;
+      --text-muted: #a8a29e;
+      --accent-coral: #dc5a35;
+      --accent-coral-light: #f4a488;
+      --accent-coral-pale: #fde8df;
+      --accent-sage: #4a7c59;
+      --accent-sage-light: #a8c5ae;
+      --accent-gold: #c8a96e;
+      --accent-gold-light: #e8d5a8;
+      --border: #e5ddd3;
+      --border-light: #f0ebe4;
+      --shadow-sm: 0 1px 3px rgba(28,25,23,0.06);
+      --shadow-md: 0 4px 16px rgba(28,25,23,0.08);
+      --shadow-lg: 0 12px 40px rgba(28,25,23,0.12);
+      --shadow-warm: 0 8px 32px rgba(220,90,53,0.12);
     }
 
+    html { scroll-behavior: smooth; }
+
     body {
-      font-family: 'Outfit', sans-serif;
-      background: var(--primary);
-      color: var(--text);
-      min-height: 100vh;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
     }
 
-    #app {
-      min-height: 100vh;
-    }
-
-    /* Animated background */
-    .bg-gradient {
+    body::before {
+      content: '';
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background:
-        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124, 58, 237, 0.15), transparent),
-        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(124, 58, 237, 0.1), transparent),
-        radial-gradient(ellipse 60% 40% at 0% 100%, rgba(16, 185, 129, 0.05), transparent);
-      z-index: -1;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 1000;
+      opacity: 0.4;
     }
 
-    .bg-grid {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-image:
-        linear-gradient(rgba(124, 58, 237, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(124, 58, 237, 0.03) 1px, transparent 1px);
-      background-size: 60px 60px;
-      z-index: -1;
-    }
+    #app { min-height: 100vh; position: relative; }
 
-    /* Scrollbar */
-    ::-webkit-scrollbar {
-      width: 8px;
-    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-base); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-    ::-webkit-scrollbar-track {
-      background: var(--primary);
-    }
+    ::selection { background: var(--accent-coral-pale); color: var(--accent-coral); }
 
-    ::-webkit-scrollbar-thumb {
-      background: var(--accent);
+    :focus-visible {
+      outline: 2px solid var(--accent-coral);
+      outline-offset: 2px;
       border-radius: 4px;
-    }
-
-    /* Selection */
-    ::selection {
-      background: var(--accent);
-      color: white;
     }
   </style>
 </head>
 <body>
-  <div class="bg-gradient"></div>
-  <div class="bg-grid"></div>
   <div id="app"></div>
   <script type="module" src="/src/main.js"></script>
 </body>

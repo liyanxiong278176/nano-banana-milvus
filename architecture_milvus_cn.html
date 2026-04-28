@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Milvus混合检索架构</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-base: #faf8f5;
+            --bg-surface: #ffffff;
+            --bg-subtle: #f3ede5;
+            --bg-warm: #ebe3d7;
+            --text-primary: #1c1917;
+            --text-secondary: #57534e;
+            --text-muted: #a8a29e;
+            --accent-coral: #dc5a35;
+            --accent-sage: #4a7c59;
+            --accent-blue: #3b82f6;
+            --accent-gold: #c8a96e;
+            --accent-violet: #7c3aed;
+            --border: #e5ddd3;
+            --border-light: #f0ebe4;
+        }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg-base); color: var(--text-primary); padding: 40px 20px; min-height: 100vh; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 36px; }
+        .header h1 {
+            font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 700;
+            background: linear-gradient(135deg, #4a7c59, #3b82f6, #7c3aed);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+            margin-bottom: 10px;
+        }
+        .header p { font-size: 14px; color: var(--text-muted); }
+        .card { background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 20px; padding: 32px; margin-bottom: 24px; box-shadow: 0 2px 12px rgba(28,25,23,0.06); }
+        .card h2 { font-size: 15px; font-weight: 700; color: var(--accent-sage); margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+        .card h2::before { content: ''; width: 4px; height: 16px; background: var(--accent-sage); border-radius: 2px; }
+        .mermaid { display: flex; justify-content: center; background: var(--bg-subtle); border-radius: 14px; padding: 24px; }
+        .components { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+        .component { background: var(--bg-subtle); border: 1px solid var(--border-light); border-radius: 14px; padding: 16px; text-align: center; transition: all 0.2s; }
+        .component:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(28,25,23,0.08); }
+        .component h3 { font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+        .component.dense h3 { color: var(--accent-violet); }
+        .component.sparse h3 { color: var(--accent-coral); }
+        .component.scalar h3 { color: var(--accent-sage); }
+        .component p { font-size: 12px; color: var(--text-muted); }
+        .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 24px; }
+        .metric { background: var(--bg-subtle); border: 1px solid var(--border-light); border-radius: 14px; padding: 20px; text-align: center; }
+        .metric .value { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 700; color: var(--accent-sage); }
+        .metric .label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Milvus 混合检索架构设计</h1>
+            <p>Dense向量 + BM25稀疏向量 + 标量过滤 三维检索体系</p>
+        </div>
+
+        <div class="card">
+            <h2>检索流程架构</h2>
+            <div class="mermaid">
+flowchart TB
+    subgraph INPUT["用户查询"]
+        Q[Query 查询文本]
+    end
+    subgraph SPLIT["查询分解"]
+        QD[Dense向量<br/>语义embedding]
+        QK[BM25关键词<br/>稀疏向量]
+        QF[标量过滤条件<br/>品类/销量范围]
+    end
+    subgraph SEARCH["并行检索"]
+        VD[Milvus向量检索<br/>语义相似度 Top-K]
+        VK[BM25关键词检索<br/>关键词匹配评分]
+        VF[标量过滤器<br/>品类+销量筛选]
+    end
+    subgraph MERGE["结果融合"]
+        FU[权重融合<br/>DENSE×0.6 + BM25×0.3 + SCALAR×0.1]
+        RANK[Rerank排序]
+    end
+    OUTPUT[Top-N 精准结果]
+
+    Q --> QD & QK & QF
+    QD --> VD
+    QK --> VK
+    QF --> VF
+    VD & VK & VF --> FU
+    FU --> RANK
+    RANK --> OUTPUT
+
+    style INPUT fill:#eff6ff,stroke:#3b82f6
+    style SPLIT fill:#f3f0ff,stroke:#7c3aed
+    style SEARCH fill:#f0fdf4,stroke:#4a7c59
+    style MERGE fill:#fffbeb,stroke:#c8a96e
+    style OUTPUT fill:#fff4f0,stroke:#dc5a35
+            </div>
+        </div>
+
+        <div class="components">
+            <div class="component dense">
+                <h3>Dense向量检索</h3>
+                <p>语义匹配 · embedding模型编码 · 余弦相似度计算</p>
+            </div>
+            <div class="component sparse">
+                <h3>BM25稀疏检索</h3>
+                <p>关键词精确匹配 · TF-IDF权重 · 词项频率统计</p>
+            </div>
+            <div class="component scalar">
+                <h3>标量过滤</h3>
+                <p>品类分类 · 销量范围 · 价格区间</p>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top:24px">
+            <h2>性能指标</h2>
+            <div class="metrics">
+                <div class="metric"><div class="value">90%</div><div class="label">Top10召回率</div></div>
+                <div class="metric"><div class="value">+18%</div><div class="label">准确率提升</div></div>
+                <div class="metric"><div class="value">72%→90%</div><div class="label">召回率提升</div></div>
+                <div class="metric"><div class="value">3维</div><div class="label">检索体系</div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                background: '#faf8f5',
+                primaryColor: '#f3ede5',
+                primaryTextColor: '#1c1917',
+                lineColor: '#4a7c59',
+                secondaryColor: '#ebe3d7',
+                tertiaryColor: '#f0ebe4',
+                fontFamily: 'DM Sans, PingFang SC, Microsoft YaHei, sans-serif'
+            }
+        });
+    </script>
+</body>
+</html>

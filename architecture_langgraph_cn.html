@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LangGraph多Agent协同编排架构</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-base: #faf8f5;
+            --bg-surface: #ffffff;
+            --bg-subtle: #f3ede5;
+            --bg-warm: #ebe3d7;
+            --text-primary: #1c1917;
+            --text-secondary: #57534e;
+            --text-muted: #a8a29e;
+            --accent-coral: #dc5a35;
+            --accent-violet: #7c3aed;
+            --accent-sage: #4a7c59;
+            --accent-gold: #c8a96e;
+            --border: #e5ddd3;
+            --border-light: #f0ebe4;
+        }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg-base);
+            color: var(--text-primary);
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 36px; }
+        .header h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 28px; font-weight: 700;
+            background: linear-gradient(135deg, #7c3aed, #dc5a35);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+        .header p { font-size: 14px; color: var(--text-muted); }
+        .card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-light);
+            border-radius: 20px;
+            padding: 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 12px rgba(28,25,23,0.06);
+        }
+        .card h2 {
+            font-size: 15px; font-weight: 700;
+            color: var(--accent-violet);
+            margin-bottom: 20px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .card h2::before {
+            content: ''; width: 4px; height: 16px;
+            background: var(--accent-violet); border-radius: 2px;
+        }
+        .mermaid { display: flex; justify-content: center; background: var(--bg-subtle); border-radius: 14px; padding: 24px; }
+        .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+        .metric {
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-light);
+            border-radius: 14px; padding: 20px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .metric:hover { background: var(--bg-warm); transform: translateY(-2px); }
+        .metric .value { font-family: 'Cormorant Garamond', serif; font-size: 32px; font-weight: 700; color: var(--accent-violet); }
+        .metric .label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 20px; justify-content: center; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+        .legend-color { width: 12px; height: 12px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>LangGraph 多Agent协同编排架构设计</h1>
+            <p>基于状态机的 5 个智能体协同编排方案</p>
+        </div>
+
+        <div class="card">
+            <h2>状态机工作流</h2>
+            <div class="mermaid">
+stateDiagram-v2
+    [*] --> Upload: 用户上传图片/文本
+    Upload --> Retrieval: 上传完成
+    Retrieval --> Gen: 检索完成
+    Gen --> QualityJudge: 生成完成
+    QualityJudge --> Result: ✅ 质量达标
+    QualityJudge --> Gen: ❌ 质量不达标<br/>重试(≤1次)
+    Result --> [*]: 输出最终结果
+            </div>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#7c3aed"></div>Upload 智能体</div>
+                <div class="legend-item"><div class="legend-color" style="background:#00d4ff"></div>Retrieval 智能体</div>
+                <div class="legend-item"><div class="legend-color" style="background:#4a7c59"></div>Gen 智能体</div>
+                <div class="legend-item"><div class="legend-color" style="background:#dc5a35"></div>QualityJudge 智能体</div>
+                <div class="legend-item"><div class="legend-color" style="background:#c8a96e"></div>Result 智能体</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>关键特性</h2>
+            <div class="metrics">
+                <div class="metric"><div class="value">35%</div><div class="label">容错性提升</div></div>
+                <div class="metric"><div class="value">5</div><div class="label">Agent数量</div></div>
+                <div class="metric"><div class="value">≤1</div><div class="label">自动重试次数</div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                background: '#faf8f5',
+                primaryColor: '#f3ede5',
+                primaryTextColor: '#1c1917',
+                primaryBorderColor: '#e5ddd3',
+                lineColor: '#7c3aed',
+                secondaryColor: '#ebe3d7',
+                tertiaryColor: '#f0ebe4',
+                stateBkg: '#f3f0ff',
+                stateBorder: '#7c3aed',
+                stateSize: '18',
+                fontFamily: 'DM Sans, PingFang SC, Microsoft YaHei, sans-serif'
+            }
+        });
+    </script>
+</body>
+</html>

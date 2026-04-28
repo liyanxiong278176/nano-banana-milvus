@@ -1,661 +1,421 @@
 <template>
   <div class="results-gallery">
-    <div
-      v-for="result in results"
-      :key="result.productId"
-      class="result-card"
-    >
-      <!-- Result Header -->
+    <div v-for="result in results" :key="result.productId" class="result-card">
+
+      <!-- Card Header -->
       <div class="result-header">
-        <div class="result-info">
-          <h3 class="result-title">
-            生成结果 #{{ result.productId.slice(-6) }}
-            <span v-if="result.qualityEnabled" class="quality-badge">AI 评分模式</span>
-          </h3>
-          <div class="result-meta">
-            <span class="meta-tag">{{ getCategoryLabel(result.category) }}</span>
-            <span class="meta-tag">{{ getStyleLabel(result.style) }}</span>
+        <div class="result-identity">
+          <div class="result-id">
+            <span class="id-hash">#</span>
+            <span class="id-num">{{ result.productId.slice(-6).toUpperCase() }}</span>
+          </div>
+          <div class="result-tags">
+            <span class="tag tag--cat">{{ getCategoryLabel(result.category) }}</span>
+            <span class="tag tag--style">{{ getStyleLabel(result.style) }}</span>
+            <span v-if="result.qualityEnabled" class="tag tag--quality">AI 评分</span>
           </div>
         </div>
-        <div class="result-stats">
-          <div class="stat">
-            <span class="stat-value">{{ result.retrievedCount }}</span>
-            <span class="stat-label">参考爆款</span>
+        <div class="result-kpis">
+          <div class="kpi">
+            <div class="kpi-val">{{ result.retrievedCount }}</div>
+            <div class="kpi-lbl">参考爆款</div>
           </div>
-          <div class="stat">
-            <span class="stat-value">{{ result.generatedCount }}</span>
-            <span class="stat-label">生成图片</span>
+          <div class="kpi-divider"></div>
+          <div class="kpi">
+            <div class="kpi-val">{{ result.generatedCount }}</div>
+            <div class="kpi-lbl">生成图片</div>
           </div>
         </div>
       </div>
 
-      <!-- Generated Images with Scores -->
+      <!-- Generated Images -->
       <div class="generated-section">
-        <div class="section-title-row">
-          <h4 class="section-title">生成的图片</h4>
-          <span v-if="hasAllScores(result)" class="best-hint">
+        <div class="section-head">
+          <h4 class="section-label">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M8 1L10 6L15 3M8 1L6 6L1 3M8 1V11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="1" y="1" width="6" height="6" rx="1.5" stroke="#dc5a35" stroke-width="1.2"/>
+              <rect x="9" y="1" width="6" height="6" rx="1.5" stroke="#dc5a35" stroke-width="1.2"/>
+              <rect x="1" y="9" width="6" height="6" rx="1.5" stroke="#dc5a35" stroke-width="1.2"/>
+              <rect x="9" y="9" width="6" height="6" rx="1.5" stroke="#dc5a35" stroke-width="1.2"/>
             </svg>
-            最高分: {{ getHighestScore(result) }}/10
+            生成的图片
+          </h4>
+          <span v-if="hasAllScores(result)" class="best-pill">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+              <path d="M6 1L7.5 4.5L11 5L8.5 7.5L9 11L6 9.5L3 11L3.5 7.5L1 5L4.5 4.5L6 1Z"/>
+            </svg>
+            最高分 {{ getHighestScore(result) }}/10
           </span>
         </div>
+
         <div class="generated-grid">
           <div
             v-for="(img, idx) in result.images"
             :key="'gen-' + idx"
             class="generated-item"
-            :class="{ 'best-score': isBestScore(result, idx) }"
+            :class="{ 'is-best': isBestScore(result, idx) }"
           >
-            <!-- 星标 -->
-            <div v-if="isBestScore(result, idx)" class="best-star">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+            <!-- Best badge -->
+            <div v-if="isBestScore(result, idx)" class="best-badge">
+              <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor">
+                <path d="M6 1L7.5 4.5L11 5L8.5 7.5L9 11L6 9.5L3 11L3.5 7.5L1 5L4.5 4.5L6 1Z"/>
               </svg>
-              <span>最佳</span>
+              最佳
             </div>
 
-            <!-- 图片 -->
-            <div class="generated-image-wrapper">
-              <img :src="img" alt="Generated" class="generated-image">
+            <!-- Image -->
+            <div class="img-wrap">
+              <img :src="img" :alt="`生成图 ${idx+1}`" class="gen-img">
             </div>
 
-            <!-- 评分 -->
-            <div v-if="hasAllScores(result)" class="image-scores">
-              <div class="score-summary">
-                <span class="total-score">{{ getImageScore(result, idx) }}/10</span>
-                <span class="score-label">总分</span>
+            <!-- Scores -->
+            <div v-if="hasAllScores(result)" class="score-panel">
+              <div class="score-total">
+                <span class="score-num">{{ getImageScore(result, idx) }}</span>
+                <span class="score-denom">/10</span>
+                <span class="score-lbl">综合</span>
               </div>
-              <div class="score-breakdown">
-                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'clothing_accuracy') >= 8 }">
-                  <span class="mini-label">服装</span>
-                  <span class="mini-value">{{ getScoreValue(result, idx, 'clothing_accuracy') }}</span>
-                </div>
-                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'pose_naturalness') >= 8 }">
-                  <span class="mini-label">姿势</span>
-                  <span class="mini-value">{{ getScoreValue(result, idx, 'pose_naturalness') }}</span>
-                </div>
-                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'scene_quality') >= 8 }">
-                  <span class="mini-label">场景</span>
-                  <span class="mini-value">{{ getScoreValue(result, idx, 'scene_quality') }}</span>
-                </div>
-                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'lighting_quality') >= 8 }">
-                  <span class="mini-label">布光</span>
-                  <span class="mini-value">{{ getScoreValue(result, idx, 'lighting_quality') }}</span>
-                </div>
-                <div class="mini-score" :class="{ good: getScoreValue(result, idx, 'commercial_value') >= 8 }">
-                  <span class="mini-label">商业</span>
-                  <span class="mini-value">{{ getScoreValue(result, idx, 'commercial_value') }}</span>
+              <div class="score-dims">
+                <div class="dim" v-for="dim in scoreDims" :key="dim.key"
+                  :class="{ 'dim--good': getScoreValue(result, idx, dim.key) >= 8 }">
+                  <span class="dim-lbl">{{ dim.label }}</span>
+                  <span class="dim-val">{{ getScoreValue(result, idx, dim.key) }}</span>
                 </div>
               </div>
             </div>
 
-            <!-- 下载按钮 -->
-            <div class="generated-actions">
-              <a :href="img" :download="`generated_${idx + 1}.png`" class="download-btn">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 12V4M8 4L4 8M8 4L12 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <path d="M4 14H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <!-- Actions -->
+            <div class="item-actions">
+              <a :href="img" :download="`generated_${idx + 1}.png`" class="action-btn">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 11V3M7 3L4 6M7 3L10 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M2 11H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                 </svg>
+                下载
               </a>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Reference Images (Collapsible) -->
-      <details class="collapsible-section">
-        <summary class="collapsible-header">
+      <!-- Collapsible Reference Images -->
+      <details class="collapsible">
+        <summary class="collapsible-head">
           <span>参考爆款图</span>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
         </summary>
-        <div class="images-grid">
-          <!-- Original Image -->
-          <div class="image-item original">
-            <div class="image-header">
-              <span class="image-label">原图</span>
-            </div>
-            <div class="image-wrapper">
-              <img :src="result.originalImage" alt="Original" class="result-image">
+        <div class="ref-grid">
+          <div class="ref-item">
+            <div class="ref-label">原图</div>
+            <div class="ref-wrap">
+              <img :src="result.originalImage" alt="原图" class="ref-img">
             </div>
           </div>
-
-          <!-- Reference Images -->
-          <div v-for="(refImg, idx) in result.referenceImages" :key="'ref-' + idx" class="image-item reference">
-            <div class="image-header">
-              <span class="image-label">参考 {{ idx + 1 }}</span>
-            </div>
-            <div class="image-wrapper">
-              <img :src="refImg" alt="Reference" class="result-image">
+          <div v-for="(refImg, idx) in result.referenceImages" :key="'ref-' + idx" class="ref-item">
+            <div class="ref-label">参考 {{ idx + 1 }}</div>
+            <div class="ref-wrap">
+              <img :src="refImg" alt="参考图" class="ref-img">
             </div>
           </div>
         </div>
       </details>
 
-      <!-- Style Prompt -->
-      <details class="collapsible-section">
-        <summary class="collapsible-header">
-          <span>风格分析</span>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <!-- Collapsible Style Prompt -->
+      <details class="collapsible">
+        <summary class="collapsible-head">
+          <span>风格分析 Prompt</span>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
         </summary>
-        <div class="style-prompt">
+        <div class="prompt-block">
           <p class="prompt-text">{{ result.stylePrompt }}</p>
         </div>
       </details>
-
-      <!-- Expand/Collapse -->
-      <button
-        class="expand-btn"
-        @click="toggleExpand(result.productId)"
-      >
-        {{ expandedResults.has(result.productId) ? '收起' : '展开查看详情' }}
-        <svg :class="{ rotated: expandedResults.has(result.productId) }" width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 const props = defineProps({
-  results: {
-    type: Array,
-    required: true
-  }
+  results: { type: Array, required: true }
 })
 
-// 中文标签映射
 const categoryLabels = {
-  'midi_dress': '中长裙',
-  'maxi_dress': '长裙',
-  'mini_dress': '短裙',
-  'skirt': '半身裙',
-  'top': '上装',
-  'pants': '裤装'
+  'midi_dress': '中长裙', 'maxi_dress': '长裙', 'mini_dress': '短裙',
+  'skirt': '半身裙', 'top': '上装', 'pants': '裤装'
 }
-
 const styleLabels = {
-  'casual': '休闲',
-  'formal': '正式',
-  'sporty': '运动',
-  'elegant': '优雅',
-  'vintage': '复古',
-  'modern': '现代'
+  'casual': '休闲', 'formal': '正式', 'sporty': '运动',
+  'elegant': '优雅', 'vintage': '复古', 'modern': '现代'
 }
+const scoreDims = [
+  { key: 'clothing_accuracy', label: '服装' },
+  { key: 'pose_naturalness', label: '姿势' },
+  { key: 'scene_quality', label: '场景' },
+  { key: 'lighting_quality', label: '布光' },
+  { key: 'commercial_value', label: '商业' },
+]
 
-const getCategoryLabel = (category) => categoryLabels[category] || category
-const getStyleLabel = (style) => styleLabels[style] || style
+const getCategoryLabel = (c) => categoryLabels[c] || c
+const getStyleLabel = (s) => styleLabels[s] || s
 
-const expandedResults = ref(new Set())
-
-const toggleExpand = (productId) => {
-  if (expandedResults.value.has(productId)) {
-    expandedResults.value.delete(productId)
-  } else {
-    expandedResults.value.add(productId)
-  }
-}
-
-// 获取所有评分
 const getAllScores = (result) => {
-  if (result.allScores && Array.isArray(result.allScores) && result.allScores.length > 0) {
-    return result.allScores
-  }
-  // 如果没有 allScores，但有 qualityScores，作为单张图片处理
-  if (result.qualityScores) {
-    return [result.qualityScores]
-  }
+  if (result.allScores?.length) return result.allScores
+  if (result.qualityScores) return [result.qualityScores]
   return []
 }
-
-// 是否有完整的评分数据
 const hasAllScores = (result) => {
-  const scores = getAllScores(result)
-  return scores.length > 0 && scores.length === result.images.length
+  const s = getAllScores(result)
+  return s.length > 0 && s.length === result.images.length
 }
-
-// 获取某张图片的评分对象
-const getImageScoreObj = (result, idx) => {
-  const scores = getAllScores(result)
-  return scores[idx] || {}
-}
-
-// 获取某张图片的总分
-const getImageScore = (result, idx) => {
-  const scoreObj = getImageScoreObj(result, idx)
-  return scoreObj.average || scoreObj.avg_score || '-'
-}
-
-// 获取某张图片某维度的分数
-const getScoreValue = (result, idx, dimension) => {
-  const scoreObj = getImageScoreObj(result, idx)
-  return scoreObj[dimension] || '-'
-}
-
-// 获取最高分
+const getImageScoreObj = (result, idx) => getAllScores(result)[idx] || {}
+const getImageScore = (result, idx) => getImageScoreObj(result, idx).average || getImageScoreObj(result, idx).avg_score || '-'
+const getScoreValue = (result, idx, dim) => getImageScoreObj(result, idx)[dim] || '-'
 const getHighestScore = (result) => {
   const scores = getAllScores(result)
-  const maxScore = Math.max(...scores.map(s => s.average || s.avg_score || 0))
-  return maxScore.toFixed(1)
+  const max = Math.max(...scores.map(s => s.average || s.avg_score || 0))
+  return max.toFixed(1)
 }
-
-// 判断是否是最高分
 const isBestScore = (result, idx) => {
   const scores = getAllScores(result)
-  if (scores.length === 0) return false
-
-  const currentScore = getImageScore(result, idx)
-  const maxScore = Math.max(...scores.map(s => s.average || s.avg_score || 0))
-  const currentAvg = currentScore.average || currentScore.avg_score || 0
-
-  return currentAvg === maxScore && maxScore > 0
+  if (!scores.length) return false
+  const cur = getImageScore(result, idx)
+  const max = Math.max(...scores.map(s => s.average || s.avg_score || 0))
+  const curVal = typeof cur === 'number' ? cur : parseFloat(cur)
+  return curVal === max && max > 0
 }
 </script>
 
 <style scoped>
-.results-gallery {
-  display: grid;
-  gap: 2rem;
-}
+.results-gallery { display: grid; gap: 2rem; }
 
 .result-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 1.5rem;
-  animation: fadeUp 0.5s ease-out;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: var(--shadow-sm);
+  animation: fadeUp 0.4s ease-out;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
+/* Header */
 .result-header {
   display: flex;
-  justify-content: space-between;
-  align-items: start;
-  margin-bottom: 1.5rem;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.result-info {
-  flex: 1;
-}
-
-.result-title {
-  font-family: 'Playfair Display', serif;
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  display: flex;
   align-items: center;
-  gap: 0.75rem;
-}
-
-.quality-badge {
-  padding: 0.25rem 0.75rem;
-  background: linear-gradient(135deg, var(--accent), var(--accent-light));
-  color: white;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.result-meta {
-  display: flex;
-  gap: 0.5rem;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
   flex-wrap: wrap;
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-light);
 }
-
-.meta-tag {
-  padding: 0.25rem 0.75rem;
-  background: var(--primary);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.result-stats {
+.result-identity { display: flex; flex-direction: column; gap: 0.6rem; }
+.result-id {
   display: flex;
-  gap: 2rem;
+  align-items: baseline;
+  gap: 2px;
+  font-family: 'Cormorant Garamond', Georgia, serif;
 }
-
-.stat {
-  text-align: center;
-}
-
-.stat-value {
-  display: block;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--accent);
-}
-
-.stat-label {
+.id-hash { font-size: 1.2rem; color: var(--accent-coral); font-weight: 400; }
+.id-num { font-size: 1.6rem; font-weight: 700; color: var(--text-primary); letter-spacing: 0.05em; }
+.result-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag {
+  padding: 3px 12px;
+  border-radius: 100px;
   font-size: 0.75rem;
-  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.03em;
 }
+.tag--cat { background: var(--bg-warm); color: var(--text-secondary); }
+.tag--style { background: var(--accent-coral-pale); color: var(--accent-coral); }
+.tag--quality { background: #f3f0ff; color: #7c3aed; }
+
+.result-kpis { display: flex; align-items: center; gap: 1.25rem; }
+.kpi { text-align: center; }
+.kpi-val {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent-coral);
+  line-height: 1;
+}
+.kpi-lbl { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+.kpi-divider { width: 1px; height: 36px; background: var(--border-light); }
 
 /* Generated Section */
-.generated-section {
-  margin-bottom: 1.5rem;
-}
-
-.section-title-row {
+.generated-section { margin-bottom: 1.5rem; }
+.section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1rem;
 }
-
-.section-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.best-hint {
+.section-label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(251, 191, 36, 0.1));
-  border: 1px solid rgba(251, 191, 36, 0.3);
-  border-radius: 20px;
-  font-size: 0.875rem;
-  color: #fbbf24;
+  gap: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.best-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  background: var(--accent-gold-light);
+  border-radius: 100px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #8a6420;
 }
 
 .generated-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
 }
-
 .generated-item {
-  background: var(--primary);
-  border: 2px solid var(--border);
+  background: var(--bg-base);
+  border: 1.5px solid var(--border-light);
   border-radius: 16px;
   overflow: hidden;
-  transition: all 0.3s;
-}
-
-.generated-item.best-score {
-  border-color: #fbbf24;
-  box-shadow: 0 0 30px rgba(251, 191, 36, 0.3);
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.05), var(--primary));
-}
-
-.best-star {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.8rem;
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
-  border-radius: 20px;
-  color: white;
-  font-size: 0.875rem;
-  font-weight: 600;
-  z-index: 10;
-  box-shadow: 0 2px 10px rgba(251, 191, 36, 0.4);
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-}
-
-.generated-image-wrapper {
+  transition: all 0.25s;
   position: relative;
-  width: 100%;
 }
-
-.generated-image {
-  width: 100%;
-  aspect-ratio: 3/4;
-  object-fit: cover;
-  display: block;
+.generated-item:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+.generated-item.is-best {
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 0 3px var(--accent-gold-light), var(--shadow-md);
 }
-
-.image-scores {
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.3);
-}
-
-.score-summary {
+.best-badge {
+  position: absolute;
+  top: 10px; right: 10px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.total-score {
-  font-size: 1.5rem;
+  gap: 4px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, var(--accent-gold), var(--accent-gold-light));
+  border-radius: 100px;
+  color: white;
+  font-size: 0.75rem;
   font-weight: 700;
-  color: #fbbf24;
+  z-index: 5;
+  animation: pulse-badge 2s ease-in-out infinite;
+}
+@keyframes pulse-badge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
 }
 
-.score-label {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-}
+.img-wrap { width: 100%; }
+.gen-img { width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; }
 
-.score-breakdown {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0.5rem;
-}
-
-.mini-score {
+/* Scores */
+.score-panel { padding: 0.875rem; background: var(--bg-surface); }
+.score-total {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
+  align-items: baseline;
+  gap: 3px;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border-light);
 }
+.score-num { font-size: 1.5rem; font-weight: 700; color: var(--accent-gold); font-family: 'Cormorant Garamond', serif; }
+.score-denom { font-size: 0.875rem; color: var(--text-muted); }
+.score-lbl { font-size: 0.75rem; color: var(--text-muted); margin-left: 4px; }
+.score-dims { display: flex; gap: 6px; }
+.dim { display: flex; flex-direction: column; align-items: center; flex: 1; text-align: center; }
+.dim-lbl { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.dim-val { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-top: 2px; }
+.dim--good .dim-val { color: var(--accent-sage); }
 
-.mini-label {
-  font-size: 0.625rem;
-  color: var(--text-muted);
-  margin-bottom: 0.25rem;
-}
-
-.mini-value {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.mini-score.good .mini-value {
-  color: #10b981;
-}
-
-.generated-actions {
-  padding: 0.75rem 1rem;
+/* Actions */
+.item-actions {
+  padding: 0.6rem 0.875rem;
+  border-top: 1px solid var(--border-light);
   display: flex;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
 }
-
-.download-btn {
+.action-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0.5rem 1rem;
-  background: var(--accent);
-  color: white;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--bg-subtle);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s;
 }
+.action-btn:hover { background: var(--accent-coral-pale); color: var(--accent-coral); }
 
-.download-btn:hover {
-  background: var(--accent-light);
-  transform: scale(1.05);
-}
-
-/* Collapsible Section */
-.collapsible-section {
-  background: var(--primary);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  margin-bottom: 1rem;
+/* Collapsible */
+.collapsible {
+  background: var(--bg-base);
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  margin-bottom: 0.75rem;
   overflow: hidden;
 }
-
-.collapsible-header {
+.collapsible-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.25rem;
   cursor: pointer;
   user-select: none;
-  font-size: 0.9375rem;
-  font-weight: 500;
-  color: var(--text);
-  transition: background 0.3s;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  list-style: none;
+  transition: background 0.2s;
 }
+.collapsible-head:hover { background: var(--bg-subtle); }
+.collapsible-head::-webkit-details-marker { display: none; }
+.chevron { transition: transform 0.3s; color: var(--text-muted); }
+.collapsible[open] .chevron { transform: rotate(180deg); }
 
-.collapsible-header:hover {
-  background: var(--card-bg);
-}
-
-.collapsible-header svg {
-  transition: transform 0.3s;
-}
-
-.collapsible-section[open] .collapsible-header svg {
-  transform: rotate(180deg);
-}
-
-.collapsible-section > *:not(summary) {
-  padding: 0 1.25rem 1rem;
-}
-
-.images-grid {
+.ref-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 1rem;
-}
-
-.image-item {
-  position: relative;
-  background: var(--card-bg);
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.image-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 0.5rem 0.75rem;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent);
-  z-index: 1;
-}
-
-.image-label {
-  font-size: 0.75rem;
-  color: white;
-  font-weight: 500;
-}
-
-.generated-label {
-  color: var(--accent-light);
-}
-
-.image-wrapper {
-  aspect-ratio: 3/4;
-  overflow: hidden;
-}
-
-.result-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* Style Prompt */
-.style-prompt {
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.75rem;
   padding: 0 1.25rem 1rem;
 }
-
-.prompt-text {
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  color: var(--text);
-}
-
-/* Expand Button */
-.expand-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+.ref-item { }
+.ref-label {
+  font-size: 0.7rem;
+  font-weight: 600;
   color: var(--text-muted);
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.3s;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
 }
+.ref-wrap {
+  aspect-ratio: 3/4;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+.ref-img { width: 100%; height: 100%; object-fit: cover; }
 
-.expand-btn:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.expand-btn svg {
-  transition: transform 0.3s;
-}
-
-.expand-btn svg.rotated {
-  transform: rotate(180deg);
-}
-
-@keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+.prompt-block { padding: 0 1.25rem 1rem; }
+.prompt-text { font-size: 0.9rem; line-height: 1.7; color: var(--text-secondary); }
 
 @media (max-width: 640px) {
-  .result-header {
-    flex-direction: column;
-  }
-
-  .result-stats {
-    width: 100%;
-    justify-content: space-around;
-  }
-
-  .generated-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .score-breakdown {
-    grid-template-columns: repeat(5, 1fr);
-  }
+  .result-header { flex-direction: column; align-items: flex-start; }
+  .result-kpis { width: 100%; justify-content: center; }
+  .generated-grid { grid-template-columns: 1fr; }
 }
 </style>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>循环检索优化机制</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-base: #faf8f5;
+            --bg-surface: #ffffff;
+            --bg-subtle: #f3ede5;
+            --bg-warm: #ebe3d7;
+            --text-primary: #1c1917;
+            --text-secondary: #57534e;
+            --text-muted: #a8a29e;
+            --accent-coral: #dc5a35;
+            --accent-sage: #4a7c59;
+            --accent-gold: #c8a96e;
+            --accent-violet: #7c3aed;
+            --border: #e5ddd3;
+            --border-light: #f0ebe4;
+        }
+        body { font-family: 'DM Sans', sans-serif; background: var(--bg-base); color: var(--text-primary); padding: 40px 20px; min-height: 100vh; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 36px; }
+        .header h1 {
+            font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 700;
+            background: linear-gradient(135deg, #dc5a35, #c8a96e, #7c3aed);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+            margin-bottom: 10px;
+        }
+        .header p { font-size: 14px; color: var(--text-muted); }
+        .card { background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 20px; padding: 32px; margin-bottom: 24px; box-shadow: 0 2px 12px rgba(28,25,23,0.06); }
+        .card h2 { font-size: 15px; font-weight: 700; color: var(--accent-coral); margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+        .card h2::before { content: ''; width: 4px; height: 16px; background: var(--accent-coral); border-radius: 2px; }
+        .mermaid { display: flex; justify-content: center; background: var(--bg-subtle); border-radius: 14px; padding: 24px; }
+        .flow { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+        .flow-step {
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-light);
+            border-radius: 10px; padding: 12px 18px;
+            text-align: center; min-width: 100px;
+            transition: all 0.2s;
+        }
+        .flow-step:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(28,25,23,0.08); }
+        .flow-step h4 { font-size: 13px; color: var(--accent-coral); margin-bottom: 4px; }
+        .flow-step p { font-size: 11px; color: var(--text-muted); }
+        .flow-arrow { color: var(--text-muted); font-size: 20px; }
+        .threshold {
+            background: #fff4f0;
+            border: 2px dashed #dc5a35;
+            border-radius: 10px; padding: 12px 20px;
+            text-align: center;
+        }
+        .threshold h4 { font-size: 13px; color: var(--accent-coral); }
+        .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 24px; }
+        .metric { background: var(--bg-subtle); border: 1px solid var(--border-light); border-radius: 14px; padding: 20px; text-align: center; }
+        .metric .value { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 700; color: var(--accent-coral); }
+        .metric .label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>循环检索优化机制</h1>
+            <p>检索 → LLM评分 → 查询改写 → 再检索 (最多3轮)</p>
+        </div>
+
+        <div class="card">
+            <h2>自适应优化流程</h2>
+            <div class="mermaid">
+flowchart LR
+    subgraph ROUND1["第1轮"]
+        R1[初始检索] --> S1[LLM评分]
+        S1 --> C1{评分≥7.0?}
+    end
+    subgraph ROUND2["第2轮"]
+        C1 -->|否| RW1[查询改写]
+        RW1 --> R2[再次检索]
+        R2 --> S2[LLM评分]
+        S2 --> C2{评分≥7.0?}
+    end
+    subgraph ROUND3["第3轮"]
+        C2 -->|否| RW2[查询改写]
+        RW2 --> R3[第三次检索]
+        R3 --> S3[LLM评分]
+        S3 --> C3{评分≥7.0?}
+    end
+    subgraph END["结束"]
+        C1 -->|是| OUT1[输出结果]
+        C2 -->|是| OUT2[输出结果]
+        C3 -->|是| OUT3[输出结果]
+        C3 -->|否| OUT4[强制输出<br/>最低质量结果]
+    end
+
+    style ROUND1 fill:#f3f0ff,stroke:#7c3aed
+    style ROUND2 fill:#f0fdf4,stroke:#4a7c59
+    style ROUND3 fill:#fff4f0,stroke:#dc5a35
+    style END fill:#fffbeb,stroke:#c8a96e
+            </div>
+        </div>
+
+        <div class="flow">
+            <div class="flow-step"><h4>1. 检索</h4><p>Milvus混合检索</p></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step"><h4>2. LLM评分</h4><p>质量评估模型</p></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step"><h4>3. 判断阈值</h4><p>7.0分标准</p></div>
+            <div class="flow-arrow">→</div>
+            <div class="threshold"><h4>4. 查询改写</h4><p style="font-size:11px;color:var(--text-muted)">评分&lt;7.0时触发</p></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step"><h4>5. 再检索</h4><p>最多3轮循环</p></div>
+        </div>
+
+        <div class="card" style="margin-top:24px">
+            <h2>优化效果</h2>
+            <div class="metrics">
+                <div class="metric"><div class="value">30%</div><div class="label">生图一次通过率提升</div></div>
+                <div class="metric"><div class="value">7.0</div><div class="label">质量评分阈值</div></div>
+                <div class="metric"><div class="value">≤3</div><div class="label">最大循环轮次</div></div>
+                <div class="metric"><div class="value">自动</div><div class="label">触发机制</div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                background: '#faf8f5',
+                primaryColor: '#f3ede5',
+                primaryTextColor: '#1c1917',
+                lineColor: '#dc5a35',
+                secondaryColor: '#ebe3d7',
+                tertiaryColor: '#f0ebe4',
+                fontFamily: 'DM Sans, PingFang SC, Microsoft YaHei, sans-serif'
+            }
+        });
+    </script>
+</body>
+</html>
